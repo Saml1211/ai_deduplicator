@@ -1,31 +1,35 @@
-# Dynamic File Deduplication and Organization Tools
+# AI-Driven File Organization and Deduplication Tools
 
-This repository provides a suite of tools for identifying duplicate files and intelligently organizing directory structures. It includes both a standard rule-based deduplicator and an advanced AI-driven organizer. A setup script is also included to facilitate global installation and usage across multiple repositories.
+This repository provides a suite of tools designed to bring intelligent order to your directories. It features an advanced AI-driven organizer that analyzes file content and patterns to propose optimal structures, alongside a traditional rule-based deduplicator. A setup script facilitates easy global installation for use across all your projects.
+
+## Core Philosophy
+
+Go beyond simple duplicate removal. These tools aim to understand your data and create logical, maintainable directory structures, leveraging AI for dynamic adaptation to different content domains (code, documents, media, etc.).
 
 ## Features
 
-**Both Tools:**
-- **Content-based Deduplication:** Identifies true duplicates using SHA-256 hashing, not just filenames.
-- **Dry-Run Mode:** Preview changes safely before execution.
-- **Detailed Reporting:** Generates JSON reports (`deduplication_report.json` / `ai_deduplication_report.json`) detailing duplicates and actions.
-- **Comprehensive Logging:** Logs all operations to a file (`deduplication.log` / `ai_deduplication.log`).
+**AI-Driven Organizer (`ai_dynamic_deduplicate.py` / `ai-deduplicate` command - Primary Tool):**
+- **Intelligent Organization:** Analyzes file content, metadata, naming conventions, and existing directory patterns to generate a custom organization strategy for the target directory.
+- **Content-Aware Grouping:** Recognizes different file types and domains (e.g., financial documents, code projects, images) to group related files logically.
+- **Adaptive Learning:** Identifies existing organizational structures and can extend or refine them.
+- **Deduplication Included:** Optionally identifies and handles duplicate files (based on content hash) as part of the organization process, consolidating them intelligently.
+- **Multiple AI Options:** Integrates with LM Studio (local) and OpenAI API.
+- **Deep AI Configuration:** Fine-tune AI behavior (model, temperature, prompts) via command-line or `.deduplication_config.json`.
+- **Heuristic Fallback:** Provides a basic organization strategy if AI is unavailable.
+- **Visualization (Optional):** Generates charts (`file_extensions.png`, `target_directories.png`) showing file distribution and the proposed AI strategy.
 
-**Standard Deduplicator (`deduplicate_files.py` / `deduplicate` command):**
-- **Preferred Structure Aware:** Consolidates duplicates based on a predefined directory structure within the script.
+**Standard Deduplicator (`deduplicate_files.py` / `deduplicate` command - Legacy/Rule-Based):**
+- **Rule-Based Deduplication:** Consolidates duplicate files based on a predefined, hardcoded `PREFERRED_STRUCTURE` within the script.
+- **Content Hashing:** Uses SHA-256 to identify true duplicates.
 
-**AI-Driven Deduplicator (`ai_dynamic_deduplicate.py` / `ai-deduplicate` command):**
-- **Dynamic Analysis:** Examines file content, metadata, naming patterns, and directory structures.
-- **AI-Generated Strategy:** Uses AI (LM Studio or OpenAI) to create an optimal, context-aware organization plan for your specific data on each run.
-- **Adaptive Organization:** Recognizes different content domains (documents, media, code) and learns existing patterns.
-- **Heuristic Fallback:** Uses a rule-based approach if AI integration is unavailable.
-- **Multiple AI Integration Options:** Supports LM Studio (local) and OpenAI API.
-- **Deep AI Configuration:** Customize AI model, temperature, system prompts, etc., via command-line or config file.
-- **Advanced Visualization (Optional):** Generates `file_extensions.png` and `target_directories.png` to visualize file distribution and the proposed organization strategy.
+**Common Features (Both Tools):**
+- **Dry-Run Mode:** Preview all proposed changes before any files are moved or deleted.
+- **Detailed Reporting:** Creates JSON reports (`ai_deduplication_report.json` / `deduplication_report.json`) summarizing actions.
+- **Comprehensive Logging:** Records all steps and decisions to log files (`ai_deduplication.log` / `deduplication.log`).
 
 **Setup Tool (`setup_deduplication_tools.py`):**
-- **Global Installation:** Installs tools centrally for use across repositories.
-- **Easy Access:** Creates simple commands (`deduplicate`, `ai-deduplicate`) accessible from PATH.
-- **Local Symlinks:** Option to create local shortcuts to global tools.
+- **Global Installation:** Installs tools centrally for easy access.
+- **Command-Line Access:** Creates `ai-deduplicate` and `deduplicate` commands.
 
 ## Requirements
 
@@ -34,7 +38,7 @@ This repository provides a suite of tools for identifying duplicate files and in
   ```bash
   pip install requests
   ```
-- **Optional Packages** (for AI Deduplicator features):
+- **Optional Packages** (for AI Organizer features):
   ```bash
   pip install openai pandas matplotlib
   ```
@@ -52,7 +56,7 @@ Installs tools to `~/utils/deduplication_tools` (default) and adds them to your 
 python setup_deduplication_tools.py --global
 ```
 
-After installation, you can use `deduplicate` and `ai-deduplicate` commands from any directory.
+Now you can use `ai-deduplicate` and `deduplicate` from any directory.
 
 ### Option 2: Custom Global Location
 
@@ -62,51 +66,30 @@ python setup_deduplication_tools.py --global --tools-dir /path/to/your/tools
 
 ### Option 3: Local Symlinks (Requires Prior Global Install)
 
-Creates local symlinks in the current directory pointing to the global tools.
+Creates local shortcuts in the current directory pointing to the global tools.
 
 ```bash
 python setup_deduplication_tools.py
 ```
 
-*Note: If commands aren't available after global install, restart your terminal or update your PATH manually as per the setup script's output.*
+*Note: If commands aren't available after global install, restart your terminal or update your PATH manually.*
 
 ## Usage
 
-### Standard Deduplicator
+### AI-Driven Organizer (Recommended)
 
-Operates based on the `PREFERRED_STRUCTURE` defined within `deduplicate_files.py`.
-
-**Dry Run (Recommended First):**
-```bash
-# Using the script directly
-python deduplicate_files.py --dry-run
-
-# Using the global command (if installed)
-deduplicate --dry-run
-```
-
-**Verbose Dry Run:**
-```bash
-deduplicate --dry-run --verbose
-```
-
-**Execute (After Reviewing Dry Run):**
-```bash
-# WARNING: This modifies files!
-deduplicate
-```
-
-### AI-Driven Deduplicator
-
-Generates organization strategy dynamically.
+Generates organization strategy dynamically based on the files in the target directory.
 
 **Dry Run (Recommended First):**
 ```bash
-# Using the script directly
+# Analyze current directory
+# Using the script directly:
 python ai_dynamic_deduplicate.py --dry-run
-
-# Using the global command (if installed)
+# Using the global command (if installed):
 ai-deduplicate --dry-run
+
+# Analyze a specific directory
+ai-deduplicate --directory /path/to/analyze --dry-run
 ```
 
 **Using LM Studio (Local AI):**
@@ -120,87 +103,78 @@ ai-deduplicate --use-lm-studio --dry-run
 ai-deduplicate --dry-run
 ```
 
-**Execute with Visualization:**
+**Execute Reorganization (After Reviewing Dry Run):**
 ```bash
 # WARNING: This modifies files!
-ai-deduplicate --visualize
+ai-deduplicate --directory /path/to/target
 ```
 
-**Analyze Specific Directory:**
+**Execute with Visualization:**
 ```bash
-ai-deduplicate --directory /path/to/analyze --dry-run
+ai-deduplicate --directory /path/to/target --visualize
+```
+
+### Standard Deduplicator (Rule-Based)
+
+Operates based on the hardcoded `PREFERRED_STRUCTURE` in `deduplicate_files.py`.
+
+**Dry Run:**
+```bash
+deduplicate --dry-run
+```
+
+**Execute:**
+```bash
+# WARNING: This modifies files!
+deduplicate
 ```
 
 ## Configuration
 
-### Standard Deduplicator Customization
+### AI Organizer Configuration (`.deduplication_config.json`)
 
-Modify the `PREFERRED_STRUCTURE` dictionary directly within the `deduplicate_files.py` script to change the rule-based organization.
-
-### AI Deduplicator Configuration (`.deduplication_config.json`)
-
-Create a `.deduplication_config.json` file in the root of the repository where you run `ai-deduplicate` for persistent, repository-specific settings.
+Create a `.deduplication_config.json` file in the directory where you run `ai-deduplicate` for persistent, repository-specific settings.
 
 ```json
 {
   "lm_studio": {
-    "url": "http://192.168.2.2:1234/v1/chat/completions", // Or your local URL
-    "model": "gemma-3-27b-it", // Or your preferred model
-    "temperature": 0.5,
-    "max_tokens": 3000,
+    "url": "http://127.0.0.1:1234/v1/chat/completions", // Your local server URL
+    "model": "local-model", // Specify model loaded in LM Studio
+    "temperature": 0.7,
+    "max_tokens": 2000,
     "timeout": 300, // Timeout in seconds
-    "system_prompt": "You are an expert file organization assistant specialized in financial documents."
+    "system_prompt": "You are a file system organization expert. Analyze the provided file system information and generate an optimal organization strategy (JSON format) that groups similar files together logically."
   },
   "openai": {
-    "model": "gpt-4", // Or your preferred model
-    "temperature": 0.3,
+    "model": "gpt-4",
+    "temperature": 0.7,
     "max_tokens": 2000,
-    "timeout": 60, // Timeout in seconds
-    "system_prompt": "You are an expert file organization assistant specialized in financial documents."
+    "timeout": 60,
+    "system_prompt": "You are a file system organization expert. Analyze the provided file system information and generate an optimal organization strategy (JSON format) that groups similar files together logically."
   }
-  // Note: The 'preferred_structure' key mentioned in older READMEs is not used by the AI script;
-  // the AI generates the structure dynamically. Hardcoded structure is only used by the standard script.
 }
 ```
 
-This allows:
-- Defining specific AI models, endpoints, and parameters per project.
-- Setting custom system prompts to tailor AI behavior.
-
 **Command-Line Overrides:**
-You can override config file settings using command-line arguments:
-
+Override config settings via arguments:
 ```bash
-# Override temperature and system prompt
-ai-deduplicate --use-lm-studio --temperature 0.2 --system-prompt "Organize code files."
-
-# Specify a custom config file location
-ai-deduplicate --config ./configs/project_config.json
+ai-deduplicate --use-lm-studio --temperature 0.2 --system-prompt "Organize these photos by event and date."
+ai-deduplicate --config ./alternate_config.json
 ```
+
+### Standard Deduplicator Customization
+
+Modify the `PREFERRED_STRUCTURE` dictionary directly within the `deduplicate_files.py` script.
 
 ## Output Files
 
-- **Standard:**
-    - `deduplication_report.json`: Report of duplicates and actions.
-    - `deduplication.log`: Process log.
-- **AI-Driven:**
-    - `ai_deduplication_report.json`: Report including the generated strategy.
-    - `ai_deduplication.log`: Process log including AI interaction details.
-    - `file_extensions.png` (optional, with `--visualize`): Visualization of file types.
-    - `target_directories.png` (optional, with `--visualize`): Visualization of AI-generated organization.
-
-## How the AI Tool is Different
-
-Unlike traditional tools with static rules, the AI-driven approach:
-- **Adapts:** Generates a unique organization strategy based on *your current files* each time.
-- **Understands:** Analyzes content and metadata, not just names or extensions.
-- **Learns:** Identifies and extends existing organizational patterns.
-- **Optimizes:** Aims to create the most logical structure, not just remove duplicates.
+- **AI-Driven:** `ai_deduplication_report.json`, `ai_deduplication.log`, (optional) `file_extensions.png`, `target_directories.png`.
+- **Standard:** `deduplication_report.json`, `deduplication.log`.
 
 ## Example Use Cases for AI Tool
 
-- **Research Data:** Organize by project, experiment type, date.
-- **Photo Libraries:** Group by event, location, recognized people (future potential).
-- **Financial Documents:** Intelligently categorize receipts, statements, tax forms.
-- **Code Repositories:** Structure by language, framework, module.
-- **General Downloads Folder:** Bring order to chaos based on detected file types and content. 
+- **Downloads Folder Cleanup:** Intelligently sort mixed downloaded files into relevant categories (documents, images, installers, archives).
+- **Project Directory Structuring:** Analyze a project folder (code, notes, assets) and suggest a standardized structure.
+- **Research Data Consolidation:** Organize papers, datasets, and notes by topic, project, or date.
+- **Photo Library Management:** Group photos by inferred event, date, or potentially recognized content (future enhancement).
+- **Financial Document Archiving:** Categorize scans of receipts, statements, and tax documents. 
