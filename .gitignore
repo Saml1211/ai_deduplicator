@@ -1,0 +1,19 @@
+# Logs and Reports
+*.log
+*.json
+*.png
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+ENV/
+.env
+.venv
+
+# OS specific
+.DS_Store
+Thumbs.db 

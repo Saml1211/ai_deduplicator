@@ -1,0 +1,8 @@
+# Core dependency
+requests
+
+# Optional dependencies for AI and Visualization
+# pip install openai pandas matplotlib
+openai
+pandas
+matplotlib 
