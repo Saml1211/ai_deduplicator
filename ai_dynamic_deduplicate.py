@@ -31,33 +31,15 @@ import requests
 from typing import Dict, List, Tuple, Set, Any, Optional
 import random  # For simulation purposes
 
+# Import common utilities
+import dedup_utils
+
 # Optional imports for enhanced functionality
 try:
     import openai  # For OpenAI API integration
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
-
-# Default AI configuration
-AI_CONFIG = {
-    # LM Studio configuration
-    "lm_studio": {
-        "url": "http://192.168.2.2:1234/v1/chat/completions",
-        "model": "gemma-3-27b-it",
-        "temperature": 0.7,
-        "max_tokens": 2000,
-        "timeout": 300,  # 5 minutes default timeout
-        "system_prompt": "You are a file system organization expert. Analyze the provided file system information and generate an optimal organization strategy that groups similar files together while reducing duplication."
-    },
-    # OpenAI configuration
-    "openai": {
-        "model": "gpt-4",
-        "temperature": 0.7,
-        "max_tokens": 2000,
-        "timeout": 60,  # 1 minute default timeout
-        "system_prompt": "You are a file system organization expert. Analyze the provided file system information and generate an optimal organization strategy that groups similar files together while reducing duplication."
-    }
-}
 
 try:
     import pandas as pd
@@ -66,24 +48,9 @@ try:
 except ImportError:
     VISUALIZATION_AVAILABLE = False
 
-# Configure logging
-def setup_logging(log_file='ai_deduplication.log'):
-    """Set up logging to both console and file."""
-    log_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    
-    # File handler
-    file_handler = logging.FileHandler(log_file, mode='w')
-    file_handler.setFormatter(log_formatter)
-    logger.addHandler(file_handler)
-    
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(log_formatter)
-    logger.addHandler(console_handler)
-    
-    return logger
+# Configure logging - Handled by dedup_utils.setup_logging
+# def setup_logging(log_file='ai_deduplication.log'):
+# ... (original setup_logging code removed)
 
 # File content analysis functions
 def analyze_file_content(filepath: str) -> Dict[str, Any]:
@@ -117,92 +84,16 @@ def analyze_file_content(filepath: str) -> Dict[str, Any]:
     
     return analysis
 
-def calculate_file_hash(filepath: str) -> Optional[str]:
-    """Calculate SHA-256 hash of a file."""
-    try:
-        sha256_hash = hashlib.sha256()
-        with open(filepath, "rb") as f:
-            # Read the file in chunks to handle large files efficiently
-            for byte_block in iter(lambda: f.read(4096), b""):
-                sha256_hash.update(byte_block)
-        return sha256_hash.hexdigest()
-    except (PermissionError, FileNotFoundError, OSError) as e:
-        logging.warning(f"Could not hash file {filepath}: {e}")
-        return None
+# Calculate file hash - Handled by dedup_utils.calculate_file_hash
+# def calculate_file_hash(filepath: str) -> Optional[str]:
+# ... (original calculate_file_hash code removed)
 
-def scan_directory(root_dir: str) -> Tuple[Dict[str, List[str]], List[Dict[str, Any]]]:
-    """
-    Scan the directory to find duplicates and analyze content.
-    Returns a tuple of:
-    1. Dictionary mapping file hash to list of file paths
-    2. List of file analysis results
-    """
-    file_hashes = defaultdict(list)
-    duplicate_files = defaultdict(list)
-    file_analyses = []
-    
-    # Skip these files/directories
-    skip_patterns = {'.DS_Store', '.git', '__pycache__', 'node_modules', 'venv'}
-    skip_extensions = {'.pyc', '.pyo', '.pyd', '.so', '.dll', '.exe'}
-    
-    total_files = 0
-    processed_files = 0
-    
-    # First, get a count of total files for progress reporting
-    for root, dirs, files in os.walk(root_dir):
-        # Skip directories that match skip patterns
-        dirs[:] = [d for d in dirs if d not in skip_patterns]
-        
-        for filename in files:
-            if any(pattern in filename for pattern in skip_patterns):
-                continue
-                
-            if os.path.splitext(filename)[1].lower() in skip_extensions:
-                continue
-                
-            total_files += 1
-    
-    logging.info(f"Scanning and analyzing {total_files} files...")
-    
-    # Now process each file
-    for root, dirs, files in os.walk(root_dir):
-        # Skip directories that match skip patterns
-        dirs[:] = [d for d in dirs if d not in skip_patterns]
-        
-        for filename in files:
-            if any(pattern in filename for pattern in skip_patterns):
-                continue
-                
-            if os.path.splitext(filename)[1].lower() in skip_extensions:
-                continue
-                
-            filepath = os.path.join(root, filename)
-            
-            # Calculate file hash
-            file_hash = calculate_file_hash(filepath)
-            if file_hash:
-                file_hashes[file_hash].append(filepath)
-            
-            # Analyze file content
-            try:
-                analysis = analyze_file_content(filepath)
-                file_analyses.append(analysis)
-            except Exception as e:
-                logging.warning(f"Could not analyze {filepath}: {e}")
-            
-            processed_files += 1
-            if processed_files % 100 == 0 or processed_files == total_files:
-                logging.info(f"Processed {processed_files}/{total_files} files ({processed_files/total_files*100:.1f}%)")
-    
-    # Identify duplicates (files with the same hash)
-    for file_hash, filepaths in file_hashes.items():
-        if len(filepaths) > 1:
-            duplicate_files[file_hash] = filepaths
-    
-    return duplicate_files, file_analyses
+# Scan directory - Handled by dedup_utils.scan_directory
+# def scan_directory(root_dir: str) -> Tuple[Dict[str, List[str]], List[Dict[str, Any]]]:
+# ... (original scan_directory code removed)
 
 # AI-driven organization strategy
-def generate_ai_organization_strategy(file_analyses: List[Dict[str, Any]], duplicates: Dict[str, List[str]]) -> Dict[str, str]:
+def generate_ai_organization_strategy(file_analyses: List[Dict[str, Any]], duplicates: Dict[str, List[str]], args) -> Dict[str, str]:
     """
     Generate an organization strategy using AI analysis of file content and patterns.
     Returns a dictionary mapping regex patterns to target directories.
@@ -541,10 +432,15 @@ def apply_organization_strategy(strategy: Dict[str, str], duplicates: Dict[str, 
             
             # Prepare target path
             filename = os.path.basename(keep_file)
+            # Ensure target_location ends with a separator
+            if not target_location.endswith(os.sep):
+                target_location += os.sep
             target_path = os.path.join(target_location, filename)
             
             # Check if target path already exists (with a different hash)
-            if os.path.exists(target_path) and calculate_file_hash(target_path) != file_hash:
+            # Use the utility function for hashing
+            target_hash = dedup_utils.calculate_file_hash(target_path) if os.path.exists(target_path) else None
+            if target_hash and target_hash != file_hash:
                 # Generate a unique name by adding a timestamp
                 name, ext = os.path.splitext(filename)
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -671,7 +567,7 @@ def save_report(report: Dict[str, Any], filename: str = 'ai_deduplication_report
 def main():
     global args  # Make args available to other functions
     
-    parser = argparse.ArgumentParser(description='AI-Driven File Deduplication and Organization')
+    parser = argparse.ArgumentParser(description='AI-Driven File Organization and Deduplication')
     parser.add_argument('--dry-run', action='store_true', help='Simulate operations without making changes')
     parser.add_argument('--directory', '-d', default='.', help='Directory to analyze (default: current directory)')
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
@@ -683,20 +579,17 @@ def main():
     parser.add_argument('--no-ai', action='store_true', help='Skip AI processing and use heuristics only')
     args = parser.parse_args()
     
-    # Set up logging
-    log_level = logging.DEBUG if args.verbose else logging.INFO
-    logger = setup_logging()
-    logger.setLevel(log_level)
+    # Set up logging using the utility function
+    logger = dedup_utils.setup_logging('ai_deduplication.log', args.verbose)
     
     # Start the deduplication process
-    logging.info("Starting AI-driven file deduplication process...")
+    logging.info("Starting AI-driven file organization process...")
     logging.info(f"Mode: {'DRY RUN' if args.dry_run else 'LIVE'}")
     logging.info(f"Target directory: {os.path.abspath(args.directory)}")
     
-    # Step 1: Scan directory and analyze files
-    duplicates, file_analyses = scan_directory(args.directory)
-    logging.info(f"Found {len(duplicates)} unique files with duplicates")
-    logging.info(f"Analyzed {len(file_analyses)} files for content patterns")
+    # Step 1: Scan directory and analyze files using the utility function
+    # Pass analyze_content=True as this script needs the analysis results
+    duplicates, file_analyses = dedup_utils.scan_directory(args.directory, analyze_content=True)
     
     # Apply command-line overrides to configuration
     if args.config:
@@ -731,8 +624,11 @@ def main():
     # Step 2: Generate AI-driven organization strategy
     if args.use_lm_studio:
         logging.info("Using LM Studio local server for AI strategy generation")
-    strategy = generate_ai_organization_strategy(file_analyses, duplicates)
-    logging.info(f"Generated AI organization strategy with {len(strategy)} patterns")
+    strategy = generate_ai_organization_strategy(file_analyses, duplicates, args)
+    logging.info(f"Generated AI organization strategy with {len(strategy)} patterns:")
+    # Log the generated strategy for clarity
+    for pattern, target in strategy.items():
+        logging.info(f"  '{pattern}' -> '{target}'")
     
     # Optional: Visualize strategy
     if args.visualize:
@@ -742,19 +638,16 @@ def main():
     operations = apply_organization_strategy(strategy, duplicates)
     logging.info(f"Generated plan with {len(operations)} operations")
     
-    # Step 4: Execute operations
-    stats = execute_operations(operations, dry_run=args.dry_run)
+    # Step 4: Execute operations using the utility function
+    stats = dedup_utils.execute_operations(operations, dry_run=args.dry_run)
     
-    # Step 5: Generate and save report
-    report = generate_report(duplicates, operations, stats, strategy)
-    save_report(report)
+    # Step 5: Generate and save report using utility functions
+    report = dedup_utils.generate_report(duplicates, operations, stats, strategy)
+    dedup_utils.save_report(report, filename='ai_deduplication_report.json')
     
     # Print summary
-    logging.info("AI-driven deduplication process complete!")
-    logging.info(f"Files moved: {stats['moved']}")
-    logging.info(f"Files removed: {stats['removed']}")
-    logging.info(f"Errors: {stats['errors']}")
-    logging.info(f"{'No changes were made (dry run)' if args.dry_run else 'All changes have been applied'}")
+    logging.info("AI-driven organization process complete!")
+    logging.info(f"{'No changes were made (dry run)' if args.dry_run else 'Changes have been applied based on the plan.'}")
     logging.info("See ai_deduplication_report.json for details")
     
     if args.visualize and VISUALIZATION_AVAILABLE:
