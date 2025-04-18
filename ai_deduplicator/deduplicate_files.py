@@ -30,7 +30,7 @@ import re
 import json
 
 # Import common utilities
-import dedup_utils
+from . import dedup_utils
 
 # Configure logging - Handled by dedup_utils.setup_logging
 # def setup_logging(log_file='deduplication.log'):

@@ -32,7 +32,7 @@ from typing import Dict, List, Tuple, Set, Any, Optional
 import random  # For simulation purposes
 
 # Import common utilities
-import dedup_utils
+from . import dedup_utils
 
 # Optional imports for enhanced functionality
 try:

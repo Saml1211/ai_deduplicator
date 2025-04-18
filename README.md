@@ -46,35 +46,46 @@ Go beyond simple duplicate removal. These tools aim to understand your data and 
 
 ## Setup and Installation
 
-Use the `setup_deduplication_tools.py` script to install the tools.
+This project is packaged using standard Python tools (`setuptools` and `pyproject.toml`).
 
-### Option 1: Global Installation (Recommended)
+### Installation
 
-Installs tools to `~/utils/deduplication_tools` (default) and adds them to your PATH.
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd ai-deduplicator
+    ```
+2.  **Install the package:**
+    *   **Basic installation (core functionality):**
+        ```bash
+        pip install .
+        ```
+    *   **With AI features (OpenAI):**
+        ```bash
+        pip install .[ai]
+        ```
+    *   **With Visualization features:**
+        ```bash
+        pip install .[viz]
+        ```
+    *   **Full installation (all optional features):**
+        ```bash
+        pip install .[full]
+        ```
+
+*(Using a virtual environment is highly recommended)*
+
+This will install the necessary dependencies and make the `ai-deduplicate` and `deduplicate` commands available in your environment.
+
+### Uninstallation
 
 ```bash
-python setup_deduplication_tools.py --global
+pip uninstall ai-deduplicator
 ```
-
-Now you can use `ai-deduplicate` and `deduplicate` from any directory.
-
-### Option 2: Custom Global Location
-
-```bash
-python setup_deduplication_tools.py --global --tools-dir /path/to/your/tools
-```
-
-### Option 3: Local Symlinks (Requires Prior Global Install)
-
-Creates local shortcuts in the current directory pointing to the global tools.
-
-```bash
-python setup_deduplication_tools.py
-```
-
-*Note: If commands aren't available after global install, restart your terminal or update your PATH manually.*
 
 ## Usage
+
+Once installed, you can use the commands directly:
 
 ### AI-Driven Organizer (Recommended)
 
@@ -106,12 +117,15 @@ ai-deduplicate --dry-run
 **Execute Reorganization (After Reviewing Dry Run):**
 ```bash
 # WARNING: This modifies files!
-ai-deduplicate --directory /path/to/target
+# ai-deduplicate --directory /path/to/target
+# Example using the command:
+ai-deduplicate --directory /path/to/target # Use the installed command
 ```
 
 **Execute with Visualization:**
 ```bash
-ai-deduplicate --directory /path/to/target --visualize
+# ai-deduplicate --directory /path/to/target --visualize
+ai-deduplicate --directory /path/to/target --visualize # Use the installed command
 ```
 
 ### Standard Deduplicator (Rule-Based)
@@ -120,13 +134,15 @@ Operates based on the hardcoded `PREFERRED_STRUCTURE` in `deduplicate_files.py`.
 
 **Dry Run:**
 ```bash
-deduplicate --dry-run
+# deduplicate --dry-run
+deduplicate --dry-run # Use the installed command
 ```
 
 **Execute:**
 ```bash
 # WARNING: This modifies files!
-deduplicate
+# deduplicate
+deduplicate # Use the installed command
 ```
 
 ## Configuration
