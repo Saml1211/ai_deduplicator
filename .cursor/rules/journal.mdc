@@ -1,0 +1,45 @@
+# AI Deduplicator Project Intelligence Journal
+
+## Project Patterns and Insights
+
+### Code Structure
+- The project follows a modular design with clear separation of concerns
+- Core functionality is split between AI-driven organization and rule-based deduplication
+- Shared utilities are extracted into a common module
+- Configuration handling spans multiple sources (CLI, file, environment variables)
+
+### Implementation Patterns
+- AI interactions are wrapped in try/except blocks with fallback mechanisms
+- File operations are collected before execution to support dry-run previews
+- JSON is used for both configuration and reporting
+- Logging is comprehensive throughout the codebase
+
+### User Preferences
+- Safety is prioritized with dry-run mode as a recommended first step
+- Detailed reporting and logging provide transparency
+- Multiple AI options accommodate different user environments
+- Command-line interface follows standard patterns for usability
+
+### Critical Implementation Paths
+- File scanning and hash calculation are fundamental operations
+- AI strategy generation is a key differentiator but has fallbacks
+- File operations must be validated for safety before execution
+- Reporting and visualization provide crucial user feedback
+
+### Known Challenges
+- AI service availability and reliability
+- Performance with large directories
+- Cross-platform compatibility for file operations
+- Balancing automation with user control
+
+### Evolution of Decisions
+- Started with a traditional rule-based approach, expanded to AI-driven
+- Added multiple AI options for flexibility
+- Enhanced reporting and visualization over time
+- Improved configuration options for better customization
+
+### Tool Usage
+- Primary interaction through command-line interface
+- Configuration through .deduplication_config.json
+- Reports generated in JSON format
+- Visualization through optional matplotlib charts 

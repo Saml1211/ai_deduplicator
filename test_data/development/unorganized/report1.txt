@@ -1,0 +1,15 @@
+This is a sample report file.
+It contains some text content that would be analyzed by the AI organizer.
+The file includes various keywords like data, analysis, results, and conclusions.
+
+REPORT SUMMARY
+-------------
+This report provides an overview of the project status.
+Key findings indicate progress in several areas.
+Further analysis is required for complete assessment.
+
+NEXT STEPS
+----------
+1. Complete remaining tasks
+2. Review findings with team
+3. Prepare final presentation
