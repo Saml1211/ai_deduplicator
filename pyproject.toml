@@ -8,9 +8,9 @@ version = "0.1.0"
 description = "AI-driven file organization and deduplication tools."
 readme = "README.md"
 requires-python = ">=3.7" # Increased slightly for safety with newer features
-license = {text = "MIT License"} # Assuming MIT, can be changed
+license = {text = "MIT License"}
 authors = [
-  {name = "Your Name", email = "you@example.com"}, # Placeholder
+  {name = "AI Deduplicator Contributors", email = "contributors@example.com"},
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -26,17 +26,21 @@ dependencies = [
 
 [project.optional-dependencies]
 full = [
-    "openai>=1.0",      # Added version constraint example
+    "openai>=1.0",
     "pandas>=1.0",
     "matplotlib>=3.0",
 ]
 ai = ["openai>=1.0"]
 viz = ["pandas>=1.0", "matplotlib>=3.0"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
 
 [project.scripts]
 ai-deduplicate = "ai_deduplicator.ai_dynamic_deduplicate:main"
 deduplicate = "ai_deduplicator.deduplicate_files:main"
 
 [project.urls]
-"Homepage" = "https://github.com/yourusername/ai-deduplicator" # Placeholder
-"Bug Tracker" = "https://github.com/yourusername/ai-deduplicator/issues" # Placeholder 
+"Homepage" = "https://github.com/Saml1211/ai_deduplicator"
+"Bug Tracker" = "https://github.com/Saml1211/ai_deduplicator/issues" 

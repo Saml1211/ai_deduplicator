@@ -33,7 +33,7 @@ Go beyond simple duplicate removal. These tools aim to understand your data and 
 
 ## Requirements
 
-- Python 3.6+
+- Python 3.7+
 - **Required Packages:**
   ```bash
   pip install requests

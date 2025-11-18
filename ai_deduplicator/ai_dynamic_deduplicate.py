@@ -48,9 +48,24 @@ try:
 except ImportError:
     VISUALIZATION_AVAILABLE = False
 
-# Configure logging - Handled by dedup_utils.setup_logging
-# def setup_logging(log_file='ai_deduplication.log'):
-# ... (original setup_logging code removed)
+# AI Configuration - Default settings for AI backends
+AI_CONFIG = {
+    'lm_studio': {
+        'model': 'gemma-3-27b-it',
+        'temperature': 0.7,
+        'max_tokens': 2000,
+        'system_prompt': 'You are a file system organization expert.',
+        'url': 'http://127.0.0.1:1234/v1/chat/completions',
+        'timeout': 300
+    },
+    'openai': {
+        'model': 'gpt-4',
+        'temperature': 0.7,
+        'max_tokens': 2000,
+        'system_prompt': 'You are a file system organization expert.',
+        'timeout': 60
+    }
+}
 
 # File content analysis functions
 def analyze_file_content(filepath: str) -> Dict[str, Any]:
@@ -84,13 +99,29 @@ def analyze_file_content(filepath: str) -> Dict[str, Any]:
     
     return analysis
 
-# Calculate file hash - Handled by dedup_utils.calculate_file_hash
-# def calculate_file_hash(filepath: str) -> Optional[str]:
-# ... (original calculate_file_hash code removed)
+def validate_strategy(strategy: Dict[str, str]) -> bool:
+    """
+    Validate that a strategy dictionary has the expected structure.
+    Returns True if valid, raises ValueError if invalid.
+    """
+    if not isinstance(strategy, dict):
+        raise ValueError(f"Strategy must be a dictionary, got {type(strategy).__name__}")
 
-# Scan directory - Handled by dedup_utils.scan_directory
-# def scan_directory(root_dir: str) -> Tuple[Dict[str, List[str]], List[Dict[str, Any]]]:
-# ... (original scan_directory code removed)
+    if len(strategy) == 0:
+        raise ValueError("Strategy dictionary is empty")
+
+    # Validate that all keys and values are strings
+    for pattern, target in strategy.items():
+        if not isinstance(pattern, str):
+            raise ValueError(f"Strategy pattern must be string, got {type(pattern).__name__}: {pattern}")
+        if not isinstance(target, str):
+            raise ValueError(f"Strategy target must be string, got {type(target).__name__}: {target}")
+        if not pattern:
+            raise ValueError("Strategy pattern cannot be empty string")
+        if not target:
+            raise ValueError("Strategy target cannot be empty string")
+
+    return True
 
 # AI-driven organization strategy
 def generate_ai_organization_strategy(file_analyses: List[Dict[str, Any]], duplicates: Dict[str, List[str]], args) -> Dict[str, str]:
@@ -149,7 +180,7 @@ def generate_ai_organization_strategy(file_analyses: List[Dict[str, Any]], dupli
     # Try LM Studio first (command line argument will determine this)
     if args.use_lm_studio:
         try:
-            strategy, ai_response = generate_lm_studio_strategy(prompt)
+            strategy, ai_response = generate_lm_studio_strategy(prompt, args)
             logging.info("AI Response from LM Studio:")
             logging.info("-----------------------------------")
             logging.info(ai_response)
@@ -157,11 +188,11 @@ def generate_ai_organization_strategy(file_analyses: List[Dict[str, Any]], dupli
             return strategy
         except Exception as e:
             logging.warning(f"LM Studio strategy generation failed: {e}. Trying next method.")
-    
+
     # Try OpenAI if available
     if OPENAI_AVAILABLE and os.environ.get('OPENAI_API_KEY'):
         try:
-            strategy, ai_response = generate_openai_strategy(prompt)
+            strategy, ai_response = generate_openai_strategy(prompt, args)
             logging.info("AI Response from OpenAI:")
             logging.info("-----------------------------------")
             logging.info(ai_response)
@@ -198,21 +229,20 @@ def load_config_file():
     
     return config
 
-def generate_lm_studio_strategy(prompt):
+def generate_lm_studio_strategy(prompt, args):
     """Generate organization strategy using LM Studio local server."""
     config = load_config_file()
     lm_config = config['lm_studio']
-    
+
     model = lm_config.get('model', 'gemma-3-27b-it')
     temperature = lm_config.get('temperature', 0.7)
     max_tokens = lm_config.get('max_tokens', 2000)
     system_prompt = lm_config.get('system_prompt', "You are a file system organization expert.")
-    url = lm_config.get('url', "http://192.168.2.2:1234/v1/chat/completions")
     # Allow command-line override of timeout
     timeout = args.timeout if args.timeout else lm_config.get('timeout', 300)
-    
+
     # Allow command-line override of URL
-    url = args.lm_studio_url if args.lm_studio_url else lm_config.get('url', "http://192.168.2.2:1234/v1/chat/completions")
+    url = args.lm_studio_url if args.lm_studio_url else lm_config.get('url', "http://127.0.0.1:1234/v1/chat/completions")
     
     logging.info(f"Generating organization strategy using LM Studio ({model})...")
     logging.info(f"Temperature: {temperature}, Max tokens: {max_tokens}")
@@ -259,7 +289,10 @@ def generate_lm_studio_strategy(prompt):
             except json.JSONDecodeError:
                 logging.error("Failed to parse LM Studio response as JSON")
                 raise
-        
+
+        # Validate the strategy structure
+        validate_strategy(strategy)
+
         return strategy, content
         
     except requests.exceptions.RequestException as e:
@@ -304,35 +337,38 @@ def parse_text_response(text):
         return strategy
     return None
 
-def generate_openai_strategy(prompt):
+def generate_openai_strategy(prompt, args):
     """Generate organization strategy using OpenAI API."""
     config = load_config_file()
     openai_config = config['openai']
-    
+
     model = openai_config.get('model', 'gpt-4')
     temperature = openai_config.get('temperature', 0.7)
     max_tokens = openai_config.get('max_tokens', 2000)
     system_prompt = openai_config.get('system_prompt', "You are a file system organization expert.")
     # Allow command-line override of timeout
     timeout = args.timeout if args.timeout else openai_config.get('timeout', 60)
-    
-    openai.api_key = os.environ.get('OPENAI_API_KEY')
-    
+
+    # Create OpenAI client (v1.0+ API) - API key read from OPENAI_API_KEY env variable
+    from openai import OpenAI
+    client = OpenAI()
+
     logging.info(f"Generating organization strategy using OpenAI ({model})...")
     logging.info(f"Temperature: {temperature}, Max tokens: {max_tokens}")
     logging.info(f"System prompt: \"{system_prompt}\"")
-    
-    # Call OpenAI API with timeout
-    response = openai.ChatCompletion.create(
+
+    # Call OpenAI API with timeout (v1.0+ syntax)
+    response = client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ],
         temperature=temperature,
-        max_tokens=max_tokens
+        max_tokens=max_tokens,
+        timeout=timeout
     )
-    
+
     # Extract content from response
     content = response.choices[0].message.content
     
@@ -344,7 +380,12 @@ def generate_openai_strategy(prompt):
     try:
         strategy = json.loads(json_str)
         # Convert to our expected format
-        return {pattern: target for pattern, target in strategy.items()}, content
+        strategy = {pattern: target for pattern, target in strategy.items()}
+
+        # Validate the strategy structure
+        validate_strategy(strategy)
+
+        return strategy, content
     except json.JSONDecodeError:
         logging.error("Failed to parse OpenAI response as JSON")
         raise
@@ -465,37 +506,6 @@ def apply_organization_strategy(strategy: Dict[str, str], duplicates: Dict[str, 
     
     return operations
 
-def execute_operations(operations: List[Dict[str, Any]], dry_run: bool = True) -> Dict[str, int]:
-    """Execute the operations in the deduplication plan."""
-    stats = {'moved': 0, 'removed': 0, 'errors': 0}
-    
-    for op in operations:
-        try:
-            if op['action'] == 'move':
-                source = op['file']
-                dest = op['destination']
-                logging.info(f"{'[DRY RUN] ' if dry_run else ''}Moving {source} -> {dest}")
-                
-                if not dry_run:
-                    # Create the target directory if it doesn't exist
-                    os.makedirs(os.path.dirname(dest), exist_ok=True)
-                    shutil.move(source, dest)
-                stats['moved'] += 1
-                
-            elif op['action'] == 'remove':
-                filepath = op['file']
-                logging.info(f"{'[DRY RUN] ' if dry_run else ''}Removing {filepath} ({op['reason']})")
-                
-                if not dry_run:
-                    os.remove(filepath)
-                stats['removed'] += 1
-                
-        except (PermissionError, FileNotFoundError, OSError) as e:
-            logging.error(f"Error processing {op['file']}: {e}")
-            stats['errors'] += 1
-    
-    return stats
-
 def visualize_strategy(strategy: Dict[str, str], file_analyses: List[Dict[str, Any]]) -> None:
     """Generate visualizations of the organization strategy."""
     if not VISUALIZATION_AVAILABLE:
@@ -538,35 +548,7 @@ def visualize_strategy(strategy: Dict[str, str], file_analyses: List[Dict[str, A
     
     logging.info("Visualizations saved to file_extensions.png and target_directories.png")
 
-def generate_report(duplicates: Dict[str, List[str]], operations: List[Dict[str, Any]], stats: Dict[str, int], strategy: Dict[str, str]) -> Dict[str, Any]:
-    """Generate a detailed report of duplicates and operations."""
-    report = {
-        'timestamp': datetime.now().isoformat(),
-        'statistics': {
-            'total_unique_files': len(duplicates),
-            'total_duplicate_files': sum(len(files) for files in duplicates.values()) - len(duplicates),
-            'operations': stats
-        },
-        'organization_strategy': strategy,
-        'duplicates': {},
-        'operations': operations
-    }
-    
-    # Format duplicates for the report
-    for file_hash, filepaths in duplicates.items():
-        report['duplicates'][file_hash] = [str(path) for path in filepaths]
-    
-    return report
-
-def save_report(report: Dict[str, Any], filename: str = 'ai_deduplication_report.json') -> None:
-    """Save the deduplication report to a file."""
-    with open(filename, 'w') as f:
-        json.dump(report, f, indent=2)
-    logging.info(f"Report saved to {filename}")
-
 def main():
-    global args  # Make args available to other functions
-    
     parser = argparse.ArgumentParser(description='AI-Driven File Organization and Deduplication')
     parser.add_argument('--dry-run', action='store_true', help='Simulate operations without making changes')
     parser.add_argument('--directory', '-d', default='.', help='Directory to analyze (default: current directory)')
@@ -577,6 +559,8 @@ def main():
     parser.add_argument('--temperature', type=float, help='Temperature for AI generation (0.0-1.0)')
     parser.add_argument('--system-prompt', help='Custom system prompt for AI')
     parser.add_argument('--no-ai', action='store_true', help='Skip AI processing and use heuristics only')
+    parser.add_argument('--timeout', type=int, help='Timeout in seconds for AI requests')
+    parser.add_argument('--lm-studio-url', help='Custom LM Studio server URL')
     args = parser.parse_args()
     
     # Set up logging using the utility function

@@ -32,25 +32,6 @@ import json
 # Import common utilities
 from . import dedup_utils
 
-# Configure logging - Handled by dedup_utils.setup_logging
-# def setup_logging(log_file='deduplication.log'):
-#     """Set up logging to both console and file."""
-#     log_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-#     logger = logging.getLogger()
-#     logger.setLevel(logging.INFO)
-#     
-#     # File handler
-#     file_handler = logging.FileHandler(log_file, mode='w')
-#     file_handler.setFormatter(log_formatter)
-#     logger.addHandler(file_handler)
-#     
-#     # Console handler
-#     console_handler = logging.StreamHandler(sys.stdout)
-#     console_handler.setFormatter(log_formatter)
-#     logger.addHandler(console_handler)
-#     
-#     return logger
-
 # Define preferred directory structure
 # The key is a regex pattern to match file paths, the value is the preferred location
 PREFERRED_STRUCTURE = {
@@ -105,46 +86,6 @@ def get_preferred_location(filepath):
         if re.match(pattern, str(filepath)):
             return location
     return PREFERRED_STRUCTURE[r'.*']  # Default location
-
-# Find duplicates - Handled by dedup_utils.scan_directory
-# def find_duplicates(root_dir):
-#     """
-#     Scan the directory tree and find duplicate files.
-#     Returns a dictionary mapping file hash to a list of file paths.
-#     """
-#     file_hashes = defaultdict(list)
-#     duplicate_files = defaultdict(list)
-#     total_files = 0
-#     processed_files = 0
-#     
-#     # First, get a count of total files for progress reporting
-#     for root, _, files in os.walk(root_dir):
-#         for filename in files:
-#             filepath = os.path.join(root, filename)
-#             if os.path.isfile(filepath) and not any(ext in filepath for ext in SKIP_EXTENSIONS):
-#                 total_files += 1
-#     
-#     logging.info(f"Scanning {total_files} files for duplicates...")
-#     
-#     # Now process each file
-#     for root, _, files in os.walk(root_dir):
-#         for filename in files:
-#             filepath = os.path.join(root, filename)
-#             if os.path.isfile(filepath) and not any(ext in filepath for ext in SKIP_EXTENSIONS):
-#                 file_hash = calculate_file_hash(filepath)
-#                 if file_hash:
-#                     file_hashes[file_hash].append(filepath)
-#                 
-#                 processed_files += 1
-#                 if processed_files % 100 == 0 or processed_files == total_files:
-#                     logging.info(f"Processed {processed_files}/{total_files} files ({processed_files/total_files*100:.1f}%)")
-#     
-#     # Identify duplicates (files with the same hash)
-#     for file_hash, filepaths in file_hashes.items():
-#         if len(filepaths) > 1:
-#             duplicate_files[file_hash] = filepaths
-#     
-#     return duplicate_files
 
 def generate_deduplication_plan(duplicates):
     """
@@ -210,65 +151,6 @@ def generate_deduplication_plan(duplicates):
                     })
     
     return operations
-
-# Execute operations - Handled by dedup_utils.execute_operations
-# def execute_operations(operations, dry_run=True):
-#     """Execute the operations in the deduplication plan."""
-#     stats = {'moved': 0, 'removed': 0, 'errors': 0}
-#     
-#     for op in operations:
-#         try:
-#             if op['action'] == 'move':
-#                 source = op['file']
-#                 dest = op['destination']
-#                 logging.info(f"{'[DRY RUN] ' if dry_run else ''}Moving {source} -> {dest}")
-#                 
-#                 if not dry_run:
-#                     # Create the target directory if it doesn't exist
-#                     os.makedirs(os.path.dirname(dest), exist_ok=True)
-#                     shutil.move(source, dest)
-#                 stats['moved'] += 1
-#                 
-#             elif op['action'] == 'remove':
-#                 filepath = op['file']
-#                 logging.info(f"{'[DRY RUN] ' if dry_run else ''}Removing {filepath} ({op['reason']})")
-#                 
-#                 if not dry_run:
-#                     os.remove(filepath)
-#                 stats['removed'] += 1
-#                 
-#         except (PermissionError, FileNotFoundError, OSError) as e:
-#             logging.error(f"Error processing {op['file']}: {e}")
-#             stats['errors'] += 1
-#     
-#     return stats
-
-# Generate report - Handled by dedup_utils.generate_report
-# def generate_report(duplicates, operations, stats):
-#     """Generate a detailed report of duplicates and operations."""
-#     report = {
-#         'timestamp': datetime.now().isoformat(),
-#         'statistics': {
-#             'total_unique_files': len(duplicates),
-#             'total_duplicate_files': sum(len(files) for files in duplicates.values()) - len(duplicates),
-#             'operations': stats
-#         },
-#         'duplicates': {},
-#         'operations': operations
-#     }
-#     
-#     # Format duplicates for the report
-#     for file_hash, filepaths in duplicates.items():
-#         report['duplicates'][file_hash] = [str(path) for path in filepaths]
-#     
-#     return report
-
-# Save report - Handled by dedup_utils.save_report
-# def save_report(report, filename='deduplication_report.json'):
-#     """Save the deduplication report to a file."""
-#     with open(filename, 'w') as f:
-#         json.dump(report, f, indent=2)
-#     logging.info(f"Report saved to {filename}")
 
 def main():
     parser = argparse.ArgumentParser(description='Deduplicate files based on content and preferred structure.') # Updated description
