@@ -158,6 +158,7 @@ def main():
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
     parser.add_argument('--directory', '-d', default='.', help='Directory to analyze (default: current directory)')
     parser.add_argument('--undo', action='store_true', help='Rollback the last deduplication operation')
+    parser.add_argument('--force-continue', action='store_true', help='Bypass transaction log safety checks and execute without creating a transaction log. WARNING: Use only if you fully understand the risks. Rollback will be impossible if something goes wrong.')
     args = parser.parse_args()
 
     # Set up logging using the utility function
@@ -177,9 +178,31 @@ def main():
     logging.info(f"Mode: {'DRY RUN' if args.dry_run else 'LIVE'}")
     logging.info(f"Target directory: {os.path.abspath(args.directory)}")
     
+    # Parse custom skip patterns
+    custom_skip_patterns = None
+    custom_skip_extensions = None
+    
+    if args.skip_patterns:
+        custom_skip_patterns = set(p.strip() for p in args.skip_patterns.split(',') if p.strip())
+        logging.info(f"Using custom skip patterns: {custom_skip_patterns}")
+    
+    if args.skip_extensions:
+        custom_skip_extensions = set(e.strip() for e in args.skip_extensions.split(',') if e.strip())
+        logging.info(f"Using custom skip extensions: {custom_skip_extensions}")
+    
+    use_defaults = not args.no_default_skips
+    if args.no_default_skips:
+        logging.info("Default skip patterns disabled; using only custom patterns")
+    
     # Find duplicates using the utility function
     # analyze_content=False as this script doesn't use detailed analysis
-    duplicates, _ = dedup_utils.scan_directory(args.directory, analyze_content=False)
+    duplicates, _ = dedup_utils.scan_directory(
+        args.directory, 
+        analyze_content=False,
+        skip_patterns=custom_skip_patterns,
+        skip_extensions=custom_skip_extensions,
+        use_default_skips=use_defaults
+    )
     # Logging info about findings is now inside scan_directory
     # logging.info(f"Found {len(duplicates)} unique files with duplicates")
     
@@ -188,7 +211,7 @@ def main():
     logging.info(f"Generated plan with {len(operations)} operations based on preferred structure rules.")
     
     # Execute the operations using the utility function
-    stats = dedup_utils.execute_operations(operations, dry_run=args.dry_run)
+    stats = dedup_utils.execute_operations(operations, dry_run=args.dry_run, force_continue=args.force_continue)
     
     # Generate and save the report using utility functions
     # Pass strategy=None as this script uses hardcoded rules

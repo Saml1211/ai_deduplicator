@@ -18,6 +18,13 @@ try:
 except ImportError:
     RICH_AVAILABLE = False
 
+
+# Custom Exceptions
+class TransactionLogError(Exception):
+    """Raised when transaction log creation fails."""
+    pass
+
+
 # Configure logging
 def setup_logging(log_file: str, verbose: bool):
     """Set up logging to both console and file."""
@@ -44,24 +51,60 @@ def setup_logging(log_file: str, verbose: bool):
     return logger
 
 # File Discovery
-def get_files_recursively(root_dir: str) -> List[str]:
+def get_files_recursively(root_dir: str, skip_patterns: Optional[set] = None, skip_extensions: Optional[set] = None, use_defaults: bool = True) -> List[str]:
     """
-    Recursively get all files in a directory, skipping common patterns.
-    Returns a list of file paths.
+    Recursively get all files in a directory, skipping specified patterns.
+
+    Args:
+        root_dir: Root directory to scan
+        skip_patterns: Set of directory/file patterns to skip (e.g., {'.git', 'node_modules'})
+        skip_extensions: Set of file extensions to skip (e.g., {'.pyc', '.pyo'})
+        use_defaults: If True, merge custom patterns with defaults. If False, use only custom patterns.
+
+    Returns:
+        List of file paths
+
+    Examples:
+        # Use defaults only (default behavior)
+        files = get_files_recursively('/path/to/dir')
+
+        # Add custom patterns to defaults
+        custom_skip = {'.custom_dir', 'temp_files'}
+        files = get_files_recursively('/path/to/dir', skip_patterns=custom_skip)
+
+        # Replace defaults entirely
+        custom_skip = {'.DS_Store'}
+        files = get_files_recursively('/path/to/dir', skip_patterns=custom_skip, use_defaults=False)
     """
-    skip_patterns = {'.DS_Store', '.git', '__pycache__', 'node_modules', 'venv', '.idea', '.vscode'}
-    skip_extensions = {'.pyc', '.pyo', '.pyd', '.so', '.dll', '.exe'}
+    # Default skip patterns
+    default_skip_patterns = {'.DS_Store', '.git', '__pycache__', 'node_modules', 'venv', '.idea', '.vscode'}
+    default_skip_extensions = {'.pyc', '.pyo', '.pyd', '.so', '.dll', '.exe'}
+
+    # Merge or replace defaults
+    if skip_patterns is None:
+        final_skip_patterns = default_skip_patterns
+    elif use_defaults:
+        final_skip_patterns = default_skip_patterns | skip_patterns
+    else:
+        final_skip_patterns = skip_patterns
+
+    if skip_extensions is None:
+        final_skip_extensions = default_skip_extensions
+    elif use_defaults:
+        final_skip_extensions = default_skip_extensions | skip_extensions
+    else:
+        final_skip_extensions = skip_extensions
 
     files = []
     for root, dirs, filenames in os.walk(root_dir):
         # Skip directories that match skip patterns
-        dirs[:] = [d for d in dirs if d not in skip_patterns and not d.startswith('.')]
+        dirs[:] = [d for d in dirs if d not in final_skip_patterns and not d.startswith('.')]
 
         for filename in filenames:
             # Skip hidden files and common skip patterns/extensions
-            if filename.startswith('.') or any(pattern in filename for pattern in skip_patterns):
+            if filename.startswith('.') or any(pattern in filename for pattern in final_skip_patterns):
                 continue
-            if os.path.splitext(filename)[1].lower() in skip_extensions:
+            if os.path.splitext(filename)[1].lower() in final_skip_extensions:
                 continue
 
             filepath = os.path.join(root, filename)
@@ -112,7 +155,7 @@ def parallel_hash_files(files: List[str], workers: Optional[int] = None) -> Dict
     return result_dict
 
 # Directory Scanning with progress bars and parallel hashing
-def scan_directory(root_dir: str, analyze_content: bool = False, parallel: bool = True, workers: Optional[int] = None) -> Tuple[Dict[str, List[str]], List[Dict[str, Any]]]:
+def scan_directory(root_dir: str, analyze_content: bool = False, parallel: bool = True, workers: Optional[int] = None, skip_patterns: Optional[set] = None, skip_extensions: Optional[set] = None, use_default_skips: bool = True) -> Tuple[Dict[str, List[str]], List[Dict[str, Any]]]:
     """
     Scan the directory to find duplicates and optionally analyze content.
     Returns a tuple of:
@@ -124,6 +167,9 @@ def scan_directory(root_dir: str, analyze_content: bool = False, parallel: bool 
         analyze_content: Whether to analyze file content (slower)
         parallel: Use parallel hashing for better performance (default: True)
         workers: Number of worker processes for parallel hashing (default: auto)
+        skip_patterns: Custom directory/file patterns to skip
+        skip_extensions: Custom file extensions to skip
+        use_default_skips: If True, merge custom patterns with defaults. If False, use only custom patterns.
     """
     file_hashes = defaultdict(list)
     duplicate_files = defaultdict(list)
@@ -132,7 +178,7 @@ def scan_directory(root_dir: str, analyze_content: bool = False, parallel: bool 
     logging.info(f"Discovering files in {os.path.abspath(root_dir)}...")
 
     # Get all files first
-    files = get_files_recursively(root_dir)
+    files = get_files_recursively(root_dir, skip_patterns=skip_patterns, skip_extensions=skip_extensions, use_defaults=use_default_skips)
     total_files = len(files)
 
     if total_files == 0:
@@ -244,21 +290,134 @@ def scan_directory(root_dir: str, analyze_content: bool = False, parallel: bool 
     logging.info(f"Scan complete. Found {len(duplicate_files)} unique files with duplicates.")
     return duplicate_files, file_analyses
 
+# File Archiving Helpers
+def _archive_file(filepath: str, archive_dir: str = '.dedup-deleted') -> Optional[str]:
+    """
+    Archive a file to the archive directory instead of permanently deleting it.
+    Preserves original directory structure and adds timestamp to prevent collisions.
+
+    Args:
+        filepath: Path to the file to archive
+        archive_dir: Directory to archive files to (default: '.dedup-deleted')
+
+    Returns:
+        Archive path if successful, None otherwise
+    """
+    try:
+        # Get the absolute path to work with
+        abs_filepath = os.path.abspath(filepath)
+
+        # Create archive directory if it doesn't exist
+        os.makedirs(archive_dir, exist_ok=True)
+
+        # Preserve directory structure in archive
+        # For /path/to/file.txt, create .dedup-deleted/path/to/file.txt
+        if abs_filepath.startswith('/'):
+            relative_path = abs_filepath.lstrip('/')
+        else:
+            relative_path = abs_filepath
+
+        archive_path = os.path.join(archive_dir, relative_path)
+
+        # Add timestamp to prevent collisions
+        base, ext = os.path.splitext(archive_path)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # Include milliseconds
+        archive_path_with_timestamp = f"{base}_{timestamp}{ext}"
+
+        # Create the directory structure in archive
+        archive_file_dir = os.path.dirname(archive_path_with_timestamp)
+        os.makedirs(archive_file_dir, exist_ok=True)
+
+        # Move the file to archive
+        shutil.move(abs_filepath, archive_path_with_timestamp)
+
+        return archive_path_with_timestamp
+    except Exception as e:
+        logging.error(f"Failed to archive file {filepath}: {e}")
+        return None
+
+def _restore_from_archive(original_filepath: str, archive_dir: str = '.dedup-deleted') -> bool:
+    """
+    Restore a file from the archive directory.
+    Finds the most recent archived version and restores it to the original location.
+
+    Args:
+        original_filepath: Original path of the file to restore
+        archive_dir: Directory containing archived files (default: '.dedup-deleted')
+
+    Returns:
+        True if restore successful, False otherwise
+    """
+    try:
+        abs_original = os.path.abspath(original_filepath)
+
+        # Construct the expected archive path (without timestamp)
+        if abs_original.startswith('/'):
+            relative_path = abs_original.lstrip('/')
+        else:
+            relative_path = abs_original
+
+        archive_base = os.path.join(archive_dir, relative_path)
+        base, ext = os.path.splitext(archive_base)
+
+        # Find all archived versions of this file
+        archive_dir_path = os.path.dirname(archive_base)
+        if not os.path.exists(archive_dir_path):
+            logging.warning(f"Archive directory not found: {archive_dir_path}")
+            return False
+
+        # List all files in the archive directory
+        archived_files = []
+        for filename in os.listdir(archive_dir_path):
+            full_path = os.path.join(archive_dir_path, filename)
+            # Check if this is an archived version of our file
+            if filename.startswith(os.path.basename(base) + '_') and filename.endswith(ext):
+                archived_files.append(full_path)
+
+        if not archived_files:
+            logging.warning(f"No archived versions found for: {original_filepath}")
+            return False
+
+        # Sort by modification time and get the most recent
+        archived_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+        most_recent = archived_files[0]
+
+        # Restore the file to its original location
+        os.makedirs(os.path.dirname(abs_original), exist_ok=True)
+        shutil.move(most_recent, abs_original)
+
+        # Clean up any other archived versions
+        for other_archive in archived_files[1:]:
+            try:
+                os.remove(other_archive)
+                logging.debug(f"Cleaned up old archive: {other_archive}")
+            except Exception as e:
+                logging.warning(f"Could not remove old archive {other_archive}: {e}")
+
+        return True
+    except Exception as e:
+        logging.error(f"Failed to restore file from archive {original_filepath}: {e}")
+        return False
+
 # File Operations with progress bars
-def execute_operations(operations: List[Dict[str, Any]], dry_run: bool = True, create_log: bool = True, log_file: str = '.dedup_transaction.json') -> Dict[str, int]:
+def execute_operations(operations: List[Dict[str, Any]], dry_run: bool = True, create_log: bool = True, log_file: str = '.dedup_transaction.json', archive_dir: str = '.dedup-deleted', force_continue: bool = False) -> Dict[str, int]:
     """
     Execute the move/remove operations in the plan with progress tracking.
+    Files marked for removal are archived to '.dedup-deleted/' instead of being permanently deleted,
+    making undo/rollback fully reversible.
 
     Args:
         operations: List of operations to execute
         dry_run: If True, only simulate operations
         create_log: If True, create transaction log for rollback (default: True)
         log_file: Path to transaction log file
+        archive_dir: Directory to archive removed files (default: '.dedup-deleted')
+        force_continue: If True, bypass transaction log safety checks (use with caution)
 
     Returns:
         Dictionary with execution statistics
     """
-    stats = {'moved': 0, 'removed': 0, 'errors': 0}
+    stats = {'moved': 0, 'archived': 0, 'errors': 0}
 
     if not operations:
         logging.info("No operations to execute.")
@@ -267,11 +426,25 @@ def execute_operations(operations: List[Dict[str, Any]], dry_run: bool = True, c
     total_ops = len(operations)
     logging.info(f"Executing {total_ops} operations... ({'DRY RUN' if dry_run else 'LIVE'})")
 
-    # Create transaction log before executing (only for non-dry-run)
-    if not dry_run and create_log:
+    # Warning if force_continue is used
+    if force_continue and not dry_run:
+        logging.warning("=" * 80)
+        logging.warning("WARNING: --force-continue flag is set. Executing operations WITHOUT transaction log.")
+        logging.warning("         This means rollback capability is DISABLED for this operation.")
+        logging.warning("         If something goes wrong, you will NOT be able to undo these changes.")
+        logging.warning("=" * 80)
+
+    # Create transaction log before executing (only for non-dry-run and not force_continue)
+    if not dry_run and create_log and not force_continue:
         if not create_transaction_log(operations, log_file):
-            logging.warning("Failed to create transaction log. Continuing without rollback capability.")
-            create_log = False
+            error_msg = (
+                f"Failed to create transaction log at {log_file}. "
+                "Cannot proceed with file operations without rollback capability. "
+                "Please check file permissions and disk space, then retry. "
+                "Use --force-continue to bypass this check (not recommended)."
+            )
+            logging.error(error_msg)
+            raise TransactionLogError(error_msg)
 
     if RICH_AVAILABLE:
         with Progress(
@@ -305,16 +478,25 @@ def execute_operations(operations: List[Dict[str, Any]], dry_run: bool = True, c
 
                     elif op['action'] == 'remove':
                         filepath = op['file']
+                        reason = op.get('reason', 'duplicate')
 
                         if not dry_run:
                             if os.path.exists(filepath):
-                                os.remove(filepath)
+                                # Archive the file instead of permanently deleting it
+                                archive_path = _archive_file(filepath, archive_dir)
+                                if archive_path:
+                                    logging.info(f"Archived {filepath} to {archive_path} ({reason})")
+                                    stats['archived'] += 1
+                                else:
+                                    logging.error(f"Failed to archive file: {filepath}")
+                                    stats['errors'] += 1
                             else:
-                                logging.warning(f"File not found, skipping removal: {filepath}")
+                                logging.warning(f"File not found, skipping archive: {filepath}")
                                 stats['errors'] += 1
                                 progress.update(task, advance=1)
                                 continue
-                        stats['removed'] += 1
+                        else:
+                            stats['archived'] += 1
 
                 except (PermissionError, FileNotFoundError, OSError, Exception) as e:
                     logging.error(f"Error processing operation {op}: {e}")
@@ -342,15 +524,23 @@ def execute_operations(operations: List[Dict[str, Any]], dry_run: bool = True, c
                 elif op['action'] == 'remove':
                     filepath = op['file']
                     reason = op.get('reason', 'duplicate')
-                    logging.info(f"{'[DRY RUN] ' if dry_run else ''}Removing {filepath} ({reason})")
+                    logging.info(f"{'[DRY RUN] ' if dry_run else ''}Archiving {filepath} ({reason})")
 
                     if not dry_run:
                         if os.path.exists(filepath):
-                            os.remove(filepath)
+                            # Archive the file instead of permanently deleting it
+                            archive_path = _archive_file(filepath, archive_dir)
+                            if archive_path:
+                                logging.info(f"Successfully archived to {archive_path}")
+                                stats['archived'] += 1
+                            else:
+                                logging.error(f"Failed to archive file: {filepath}")
+                                stats['errors'] += 1
                         else:
-                            logging.warning(f"File not found, skipping removal: {filepath}")
+                            logging.warning(f"File not found, skipping archive: {filepath}")
                             stats['errors'] += 1
-                    stats['removed'] += 1
+                    else:
+                        stats['archived'] += 1
 
             except (PermissionError, FileNotFoundError, OSError, Exception) as e:
                 logging.error(f"Error processing operation {op}: {e}")
@@ -360,7 +550,7 @@ def execute_operations(operations: List[Dict[str, Any]], dry_run: bool = True, c
                 percentage = (i / total_ops * 100)
                 logging.info(f"Progress: {i}/{total_ops} operations ({percentage:.1f}%)")
 
-    logging.info(f"Operation execution finished. Moved: {stats['moved']}, Removed: {stats['removed']}, Errors: {stats['errors']}")
+    logging.info(f"Operation execution finished. Moved: {stats['moved']}, Archived: {stats['archived']}, Errors: {stats['errors']}")
 
     # Mark transaction as complete
     if not dry_run and create_log:
@@ -465,14 +655,15 @@ def read_transaction_log(log_file: str = '.dedup_transaction.json') -> Optional[
         logging.error(f"Failed to read transaction log: {e}")
         return None
 
-def rollback_operations(log_file: str = '.dedup_transaction.json', dry_run: bool = True) -> Dict[str, int]:
+def rollback_operations(log_file: str = '.dedup_transaction.json', dry_run: bool = True, archive_dir: str = '.dedup-deleted') -> Dict[str, int]:
     """
     Rollback operations from a transaction log.
-    Reverses move and remove operations.
+    Reverses move and remove operations. Restores archived files from '.dedup-deleted/'.
 
     Args:
         log_file: Path to transaction log file
         dry_run: If True, only simulate rollback
+        archive_dir: Directory containing archived files (default: '.dedup-deleted')
 
     Returns:
         Dictionary with rollback statistics
@@ -529,9 +720,20 @@ def rollback_operations(log_file: str = '.dedup_transaction.json', dry_run: bool
                             stats['unmoved'] += 1
 
                     elif op['action'] == 'remove':
-                        # Cannot restore deleted files
-                        logging.warning(f"Cannot restore deleted file: {op['file']}")
-                        stats['skipped'] += 1
+                        # Restore archived files
+                        original_filepath = op['file']
+
+                        if not dry_run:
+                            # Find and restore the most recent archived version
+                            restored = _restore_from_archive(original_filepath, archive_dir)
+                            if restored:
+                                logging.info(f"Restored {original_filepath} from archive")
+                                stats['restored'] += 1
+                            else:
+                                logging.warning(f"Could not restore archived file: {original_filepath}")
+                                stats['skipped'] += 1
+                        else:
+                            stats['restored'] += 1
 
                 except Exception as e:
                     logging.error(f"Error during rollback of operation {op}: {e}")
@@ -558,8 +760,20 @@ def rollback_operations(log_file: str = '.dedup_transaction.json', dry_run: bool
                         stats['unmoved'] += 1
 
                 elif op['action'] == 'remove':
-                    logging.warning(f"Cannot restore deleted file: {op['file']}")
-                    stats['skipped'] += 1
+                    # Restore archived files
+                    original_filepath = op['file']
+
+                    if not dry_run:
+                        # Find and restore the most recent archived version
+                        restored = _restore_from_archive(original_filepath, archive_dir)
+                        if restored:
+                            logging.info(f"Restored {original_filepath} from archive")
+                            stats['restored'] += 1
+                        else:
+                            logging.warning(f"Could not restore archived file: {original_filepath}")
+                            stats['skipped'] += 1
+                    else:
+                        stats['restored'] += 1
 
             except Exception as e:
                 logging.error(f"Error during rollback of operation {op}: {e}")

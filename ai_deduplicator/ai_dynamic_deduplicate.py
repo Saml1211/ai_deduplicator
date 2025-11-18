@@ -562,6 +562,9 @@ def main():
     parser.add_argument('--timeout', type=int, help='Timeout in seconds for AI requests')
     parser.add_argument('--lm-studio-url', help='Custom LM Studio server URL')
     parser.add_argument('--undo', action='store_true', help='Rollback the last AI-driven organization operation')
+    parser.add_argument('--skip-patterns', type=str, default='', help='Comma-separated list of directory/file patterns to skip (example: ".custom_dir,temp_files,cache")')
+    parser.add_argument('--skip-extensions', type=str, default='', help='Comma-separated list of file extensions to skip (example: ".tmp,.bak,.log")')
+    parser.add_argument('--no-default-skips', action='store_true', help='Disable default skip patterns and only use custom patterns')
     args = parser.parse_args()
 
     # Set up logging using the utility function
@@ -581,9 +584,31 @@ def main():
     logging.info(f"Mode: {'DRY RUN' if args.dry_run else 'LIVE'}")
     logging.info(f"Target directory: {os.path.abspath(args.directory)}")
     
-    # Step 1: Scan directory and analyze files using the utility function
+    # Step 1: Parse custom skip patterns
+    custom_skip_patterns = None
+    custom_skip_extensions = None
+    
+    if args.skip_patterns:
+        custom_skip_patterns = set(p.strip() for p in args.skip_patterns.split(',') if p.strip())
+        logging.info(f"Using custom skip patterns: {custom_skip_patterns}")
+    
+    if args.skip_extensions:
+        custom_skip_extensions = set(e.strip() for e in args.skip_extensions.split(',') if e.strip())
+        logging.info(f"Using custom skip extensions: {custom_skip_extensions}")
+    
+    use_defaults = not args.no_default_skips
+    if args.no_default_skips:
+        logging.info("Default skip patterns disabled; using only custom patterns")
+    
+    # Step 2: Scan directory and analyze files using the utility function
     # Pass analyze_content=True as this script needs the analysis results
-    duplicates, file_analyses = dedup_utils.scan_directory(args.directory, analyze_content=True)
+    duplicates, file_analyses = dedup_utils.scan_directory(
+        args.directory, 
+        analyze_content=True,
+        skip_patterns=custom_skip_patterns,
+        skip_extensions=custom_skip_extensions,
+        use_default_skips=use_defaults
+    )
     
     # Apply command-line overrides to configuration
     if args.config:
@@ -615,7 +640,7 @@ def main():
         AI_CONFIG['openai']['system_prompt'] = args.system_prompt
         logging.info(f"Using custom system prompt: \"{args.system_prompt}\"")
     
-    # Step 2: Generate AI-driven organization strategy
+    # Step 3: Generate AI-driven organization strategy
     if args.use_lm_studio:
         logging.info("Using LM Studio local server for AI strategy generation")
     strategy = generate_ai_organization_strategy(file_analyses, duplicates, args)
@@ -628,14 +653,14 @@ def main():
     if args.visualize:
         visualize_strategy(strategy, file_analyses)
     
-    # Step 3: Apply organization strategy to create operations plan
+    # Step 4: Apply organization strategy to create operations plan
     operations = apply_organization_strategy(strategy, duplicates)
     logging.info(f"Generated plan with {len(operations)} operations")
     
-    # Step 4: Execute operations using the utility function
+    # Step 5: Execute operations using the utility function
     stats = dedup_utils.execute_operations(operations, dry_run=args.dry_run)
     
-    # Step 5: Generate and save report using utility functions
+    # Step 6: Generate and save report using utility functions
     report = dedup_utils.generate_report(duplicates, operations, stats, strategy)
     dedup_utils.save_report(report, filename='ai_deduplication_report.json')
     
