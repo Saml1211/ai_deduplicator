@@ -153,18 +153,27 @@ def generate_deduplication_plan(duplicates):
     return operations
 
 def main():
-    parser = argparse.ArgumentParser(description='Deduplicate files based on content and preferred structure.') # Updated description
+    parser = argparse.ArgumentParser(description='Deduplicate files based on content and preferred structure.')
     parser.add_argument('--dry-run', action='store_true', help='Simulate operations without making changes')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
-    parser.add_argument('--directory', '-d', default='.', help='Directory to analyze (default: current directory)') # Added directory arg consistency
+    parser.add_argument('--directory', '-d', default='.', help='Directory to analyze (default: current directory)')
+    parser.add_argument('--undo', action='store_true', help='Rollback the last deduplication operation')
     args = parser.parse_args()
-    
+
     # Set up logging using the utility function
     logger = dedup_utils.setup_logging('deduplication.log', args.verbose)
-    # logger.setLevel(log_level) # Level is set within setup_logging now
-    
+
+    # Handle undo/rollback mode
+    if args.undo:
+        logging.info("ROLLBACK MODE: Undoing previous deduplication operation...")
+        logging.info(f"Mode: {'DRY RUN' if args.dry_run else 'LIVE'}")
+        stats = dedup_utils.rollback_operations(dry_run=args.dry_run)
+        logging.info("Rollback complete!")
+        logging.info(f"{'No changes were made (dry run)' if args.dry_run else 'Changes have been rolled back.'}")
+        return
+
     # Start the deduplication process
-    logging.info("Starting rule-based file deduplication process...") # Updated message
+    logging.info("Starting rule-based file deduplication process...")
     logging.info(f"Mode: {'DRY RUN' if args.dry_run else 'LIVE'}")
     logging.info(f"Target directory: {os.path.abspath(args.directory)}")
     

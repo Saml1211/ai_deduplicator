@@ -561,11 +561,21 @@ def main():
     parser.add_argument('--no-ai', action='store_true', help='Skip AI processing and use heuristics only')
     parser.add_argument('--timeout', type=int, help='Timeout in seconds for AI requests')
     parser.add_argument('--lm-studio-url', help='Custom LM Studio server URL')
+    parser.add_argument('--undo', action='store_true', help='Rollback the last AI-driven organization operation')
     args = parser.parse_args()
-    
+
     # Set up logging using the utility function
     logger = dedup_utils.setup_logging('ai_deduplication.log', args.verbose)
-    
+
+    # Handle undo/rollback mode
+    if args.undo:
+        logging.info("ROLLBACK MODE: Undoing previous AI organization operation...")
+        logging.info(f"Mode: {'DRY RUN' if args.dry_run else 'LIVE'}")
+        stats = dedup_utils.rollback_operations(dry_run=args.dry_run)
+        logging.info("Rollback complete!")
+        logging.info(f"{'No changes were made (dry run)' if args.dry_run else 'Changes have been rolled back.'}")
+        return
+
     # Start the deduplication process
     logging.info("Starting AI-driven file organization process...")
     logging.info(f"Mode: {'DRY RUN' if args.dry_run else 'LIVE'}")
