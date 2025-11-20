@@ -159,7 +159,16 @@ def main():
     parser.add_argument('--directory', '-d', default='.', help='Directory to analyze (default: current directory)')
     parser.add_argument('--undo', action='store_true', help='Rollback the last deduplication operation')
     parser.add_argument('--force-continue', action='store_true', help='Bypass transaction log safety checks and execute without creating a transaction log. WARNING: Use only if you fully understand the risks. Rollback will be impossible if something goes wrong.')
+    parser.add_argument('--skip-patterns', type=str, default='', help='Comma-separated list of directory/file patterns to skip (example: ".custom_dir,temp_files,cache")')
+    parser.add_argument('--skip-extensions', type=str, default='', help='Comma-separated list of file extensions to skip (example: ".tmp,.bak,.log")')
+    parser.add_argument('--no-default-skips', action='store_true', help='Disable default skip patterns and only use custom patterns')
+    parser.add_argument('--workers', type=int, help='Number of parallel workers for hashing (default: min(cpu_count, 8)). Recommended: 2-8 for SSD, 4-16 for HDD. Higher values may improve performance on fast storage but increase memory usage.')
     args = parser.parse_args()
+
+    # Validate workers argument if provided
+    if args.workers is not None:
+        if args.workers < 1:
+            parser.error('--workers must be >= 1')
 
     # Set up logging using the utility function
     logger = dedup_utils.setup_logging('deduplication.log', args.verbose)
@@ -202,6 +211,8 @@ def main():
         skip_patterns=custom_skip_patterns,
         skip_extensions=custom_skip_extensions,
         use_default_skips=use_defaults
+    ,
+        workers=args.workers
     )
     # Logging info about findings is now inside scan_directory
     # logging.info(f"Found {len(duplicates)} unique files with duplicates")
@@ -211,8 +222,13 @@ def main():
     logging.info(f"Generated plan with {len(operations)} operations based on preferred structure rules.")
     
     # Execute the operations using the utility function
-    stats = dedup_utils.execute_operations(operations, dry_run=args.dry_run, force_continue=args.force_continue)
-    
+    try:
+        stats = dedup_utils.execute_operations(operations, dry_run=args.dry_run)
+    except dedup_utils.TransactionLogError as e:
+        logging.error(f"Failed to execute operations: {e}")
+        logging.info("No file operations were performed due to transaction log creation failure.")
+        sys.exit(1)
+
     # Generate and save the report using utility functions
     # Pass strategy=None as this script uses hardcoded rules
     report = dedup_utils.generate_report(duplicates, operations, stats, strategy=None)

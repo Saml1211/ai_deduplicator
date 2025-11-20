@@ -126,7 +126,7 @@ def test_generate_report():
         'file': '/path/to/file2.txt',
         'reason': 'duplicate'
     }]
-    stats = {'moved': 0, 'removed': 1, 'errors': 0}
+    stats = {'moved': 0, 'archived': 1, 'errors': 0}
 
     # Generate report
     report = dedup_utils.generate_report(duplicates, operations, stats, strategy=None)
@@ -134,6 +134,6 @@ def test_generate_report():
     # Verify report structure
     assert 'timestamp' in report
     assert 'statistics' in report
-    assert 'duplicates' in report
-    assert 'operations' in report
-    assert report['statistics']['operations'] == stats
+    assert 'duplicates_found' in report
+    assert 'operations_executed_details' in report
+    assert report['statistics']['operations_executed'] == stats

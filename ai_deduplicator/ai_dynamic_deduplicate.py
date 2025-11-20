@@ -101,27 +101,111 @@ def analyze_file_content(filepath: str) -> Dict[str, Any]:
 
 def validate_strategy(strategy: Dict[str, str]) -> bool:
     """
-    Validate that a strategy dictionary has the expected structure.
-    Returns True if valid, raises ValueError if invalid.
+    Validate that a strategy dictionary has the expected structure and safe content.
+
+    Performs comprehensive validation including:
+    - Correct data types (dict with string keys and values)
+    - Valid regex patterns (compiles without errors)
+    - Path traversal prevention (no ../ or ..)
+    - Path security (relative paths only, no absolute paths)
+    - Character whitelisting (no suspicious/injection characters)
+    - Null byte detection
+    - Command injection prevention
+
+    Returns True if valid, raises ValueError with detailed error messages if invalid.
     """
+    # Type validation - strategy must be a dictionary
     if not isinstance(strategy, dict):
-        raise ValueError(f"Strategy must be a dictionary, got {type(strategy).__name__}")
+        error_msg = f"Strategy must be a dictionary, got {type(strategy).__name__}"
+        logging.error(f"VALIDATION FAILED: {error_msg}")
+        raise ValueError(error_msg)
 
+    # Empty check
     if len(strategy) == 0:
-        raise ValueError("Strategy dictionary is empty")
+        error_msg = "Strategy dictionary is empty"
+        logging.error(f"VALIDATION FAILED: {error_msg}")
+        raise ValueError(error_msg)
 
-    # Validate that all keys and values are strings
+    # Validate each pattern-target pair in the strategy
     for pattern, target in strategy.items():
+        # TYPE VALIDATION
         if not isinstance(pattern, str):
-            raise ValueError(f"Strategy pattern must be string, got {type(pattern).__name__}: {pattern}")
+            error_msg = f"Strategy pattern must be string, got {type(pattern).__name__}: {pattern}"
+            logging.error(f"VALIDATION FAILED: {error_msg}")
+            raise ValueError(error_msg)
         if not isinstance(target, str):
-            raise ValueError(f"Strategy target must be string, got {type(target).__name__}: {target}")
-        if not pattern:
-            raise ValueError("Strategy pattern cannot be empty string")
-        if not target:
-            raise ValueError("Strategy target cannot be empty string")
+            error_msg = f"Strategy target must be string, got {type(target).__name__}: {target}"
+            logging.error(f"VALIDATION FAILED: {error_msg}")
+            raise ValueError(error_msg)
 
+        # EMPTY STRING VALIDATION
+        if not pattern:
+            error_msg = "Strategy pattern cannot be empty string"
+            logging.error(f"VALIDATION FAILED: {error_msg}")
+            raise ValueError(error_msg)
+        if not target:
+            error_msg = "Strategy target cannot be empty string"
+            logging.error(f"VALIDATION FAILED: {error_msg}")
+            raise ValueError(error_msg)
+
+        # REGEX PATTERN VALIDATION - attempt to compile the pattern
+        try:
+            re.compile(pattern)
+            logging.debug(f"Regex pattern validated: '{pattern}'")
+        except re.error as e:
+            error_msg = f"Invalid regex pattern '{pattern}': {str(e)}"
+            logging.error(f"VALIDATION FAILED: {error_msg}")
+            raise ValueError(error_msg)
+
+        # PATH TRAVERSAL PREVENTION - check for directory traversal attempts
+        if '../' in target or '..' in target:
+            error_msg = f"Path traversal attempt detected in target '{target}': contains '..' or '../'"
+            logging.error(f"SECURITY VIOLATION - VALIDATION FAILED: {error_msg}")
+            raise ValueError(error_msg)
+
+        # ABSOLUTE PATH PREVENTION - targets must be relative paths
+        if os.path.isabs(target):
+            error_msg = f"Absolute path detected in target '{target}': targets must be relative paths"
+            logging.error(f"SECURITY VIOLATION - VALIDATION FAILED: {error_msg}")
+            raise ValueError(error_msg)
+
+        # NULL BYTE DETECTION - prevent null byte injection
+        if '\x00' in pattern:
+            error_msg = f"Null byte detected in pattern '{pattern}': null bytes not allowed"
+            logging.error(f"SECURITY VIOLATION - VALIDATION FAILED: {error_msg}")
+            raise ValueError(error_msg)
+        if '\x00' in target:
+            error_msg = f"Null byte detected in target '{target}': null bytes not allowed"
+            logging.error(f"SECURITY VIOLATION - VALIDATION FAILED: {error_msg}")
+            raise ValueError(error_msg)
+
+        # COMMAND INJECTION PREVENTION - check for shell metacharacters in target
+        shell_injection_patterns = ['$(', '`', ';&', '|', '>', '<']
+        for injection_pattern in shell_injection_patterns:
+            if injection_pattern in target:
+                error_msg = f"Command injection attempt detected in target '{target}': contains '{injection_pattern}'"
+                logging.error(f"SECURITY VIOLATION - VALIDATION FAILED: {error_msg}")
+                raise ValueError(error_msg)
+
+        # SUSPICIOUS CHARACTER WHITELIST - target path validation
+        # Allow: alphanumeric, dots, slashes, underscores, hyphens, spaces
+        suspicious_chars = re.findall(r'[^a-zA-Z0-9._\-/\s]', target)
+        if suspicious_chars:
+            unique_suspicious = set(suspicious_chars)
+            error_msg = f"Suspicious characters detected in target '{target}': {unique_suspicious}"
+            logging.error(f"SECURITY VIOLATION - VALIDATION FAILED: {error_msg}")
+            raise ValueError(error_msg)
+
+        # RELATIVE PATH CONVENTION - warn if target doesn't follow relative path convention
+        if not (target.startswith('./') or target.startswith('.')):
+            logging.debug(f"Target '{target}' does not follow './' relative path convention")
+
+        logging.debug(f"Validated strategy entry: '{pattern}' -> '{target}'")
+
+    # Log successful validation with summary
+    logging.info(f"Strategy validation successful: {len(strategy)} pattern-target pairs validated")
     return True
+
 
 # AI-driven organization strategy
 def generate_ai_organization_strategy(file_analyses: List[Dict[str, Any]], duplicates: Dict[str, List[str]], args) -> Dict[str, str]:
@@ -561,11 +645,20 @@ def main():
     parser.add_argument('--no-ai', action='store_true', help='Skip AI processing and use heuristics only')
     parser.add_argument('--timeout', type=int, help='Timeout in seconds for AI requests')
     parser.add_argument('--lm-studio-url', help='Custom LM Studio server URL')
+    parser.add_argument('--workers', type=int, help='Number of parallel workers for hashing (default: min(cpu_count, 8)). Recommended: 2-8 for SSD, 4-16 for HDD. Higher values may improve performance on fast storage but increase memory usage.')
     parser.add_argument('--undo', action='store_true', help='Rollback the last AI-driven organization operation')
+    parser.add_argument('--yes', '-y', action='store_true', help='Skip confirmation prompt and execute operations (for automation)')
+    parser.add_argument('--interactive', action='store_true', help='Force confirmation prompt even with --yes flag')
     parser.add_argument('--skip-patterns', type=str, default='', help='Comma-separated list of directory/file patterns to skip (example: ".custom_dir,temp_files,cache")')
     parser.add_argument('--skip-extensions', type=str, default='', help='Comma-separated list of file extensions to skip (example: ".tmp,.bak,.log")')
     parser.add_argument('--no-default-skips', action='store_true', help='Disable default skip patterns and only use custom patterns')
+    parser.add_argument('--force-continue', action='store_true', help='Bypass transaction log safety checks and execute without creating a transaction log. WARNING: Use only if you fully understand the risks. Rollback will be impossible if something goes wrong.')
     args = parser.parse_args()
+
+    # Validate workers argument if provided
+    if args.workers is not None:
+        if args.workers < 1:
+            parser.error('--workers must be >= 1')
 
     # Set up logging using the utility function
     logger = dedup_utils.setup_logging('ai_deduplication.log', args.verbose)
@@ -607,7 +700,8 @@ def main():
         analyze_content=True,
         skip_patterns=custom_skip_patterns,
         skip_extensions=custom_skip_extensions,
-        use_default_skips=use_defaults
+        use_default_skips=use_defaults,
+        workers=args.workers
     )
     
     # Apply command-line overrides to configuration
@@ -658,8 +752,13 @@ def main():
     logging.info(f"Generated plan with {len(operations)} operations")
     
     # Step 5: Execute operations using the utility function
-    stats = dedup_utils.execute_operations(operations, dry_run=args.dry_run)
-    
+    try:
+        stats = dedup_utils.execute_operations(operations, dry_run=args.dry_run, skip_confirmation=args.yes, interactive=args.interactive)
+    except dedup_utils.TransactionLogError as e:
+        logging.error(f"Failed to execute operations: {e}")
+        logging.info("No file operations were performed due to transaction log creation failure.")
+        sys.exit(1)
+
     # Step 6: Generate and save report using utility functions
     report = dedup_utils.generate_report(duplicates, operations, stats, strategy)
     dedup_utils.save_report(report, filename='ai_deduplication_report.json')

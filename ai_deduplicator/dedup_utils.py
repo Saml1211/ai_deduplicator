@@ -296,6 +296,19 @@ def _archive_file(filepath: str, archive_dir: str = '.dedup-deleted') -> Optiona
     Archive a file to the archive directory instead of permanently deleting it.
     Preserves original directory structure and adds timestamp to prevent collisions.
 
+    SECURITY CONSIDERATIONS:
+    - Archived files may contain sensitive data identical to original files
+    - Archive directory should have restrictive permissions (700 - owner access only)
+    - Consider the sensitivity of files being archived
+    - Securely delete archive directory when recovery is no longer needed
+    - Archive paths reveal file organization structure - protect access accordingly
+
+    RECOMMENDED PRACTICES:
+    - Regularly audit the archive directory: ls -la .dedup-deleted
+    - Set permissions: chmod 700 .dedup-deleted
+    - Delete archive after confirmed success: rm -rf .dedup-deleted
+    - For sensitive data: use secure deletion for archive directory
+
     Args:
         filepath: Path to the file to archive
         archive_dir: Directory to archive files to (default: '.dedup-deleted')
@@ -309,6 +322,14 @@ def _archive_file(filepath: str, archive_dir: str = '.dedup-deleted') -> Optiona
 
         # Create archive directory if it doesn't exist
         os.makedirs(archive_dir, exist_ok=True)
+
+        # SECURITY: Set restrictive permissions on archive directory
+        # This prevents other users from accessing archived (deduplicated) files
+        try:
+            os.chmod(archive_dir, 0o700)  # rwx------ (owner access only)
+        except OSError as perm_error:
+            logging.warning(f"Could not set restrictive permissions on {archive_dir}: {perm_error}")
+            logging.warning("Please manually run: chmod 700 " + archive_dir)
 
         # Preserve directory structure in archive
         # For /path/to/file.txt, create .dedup-deleted/path/to/file.txt
@@ -400,7 +421,7 @@ def _restore_from_archive(original_filepath: str, archive_dir: str = '.dedup-del
         return False
 
 # File Operations with progress bars
-def execute_operations(operations: List[Dict[str, Any]], dry_run: bool = True, create_log: bool = True, log_file: str = '.dedup_transaction.json', archive_dir: str = '.dedup-deleted', force_continue: bool = False) -> Dict[str, int]:
+def execute_operations(operations: List[Dict[str, Any]], dry_run: bool = True, create_log: bool = True, log_file: str = '.dedup_transaction.json', archive_dir: str = '.dedup-deleted', force_continue: bool = False, skip_confirmation: bool = False, interactive: bool = False) -> Dict[str, int]:
     """
     Execute the move/remove operations in the plan with progress tracking.
     Files marked for removal are archived to '.dedup-deleted/' instead of being permanently deleted,
@@ -413,6 +434,8 @@ def execute_operations(operations: List[Dict[str, Any]], dry_run: bool = True, c
         log_file: Path to transaction log file
         archive_dir: Directory to archive removed files (default: '.dedup-deleted')
         force_continue: If True, bypass transaction log safety checks (use with caution)
+        skip_confirmation: If True, skip confirmation prompt (--yes flag)
+        interactive: If True, force confirmation prompt even with skip_confirmation (--interactive flag)
 
     Returns:
         Dictionary with execution statistics
@@ -426,6 +449,26 @@ def execute_operations(operations: List[Dict[str, Any]], dry_run: bool = True, c
     total_ops = len(operations)
     logging.info(f"Executing {total_ops} operations... ({'DRY RUN' if dry_run else 'LIVE'})")
 
+    # Count operations by type
+    move_ops = sum(1 for op in operations if op['action'] == 'move')
+    archive_ops = sum(1 for op in operations if op['action'] == 'remove')
+
+    # Show confirmation prompt before executing (but not in dry-run mode)
+    if not dry_run and (interactive or not skip_confirmation):
+        logging.info("\n" + "="*70)
+        logging.info("OPERATION SUMMARY (LIVE MODE - CHANGES WILL BE PERMANENT)")
+        logging.info("="*70)
+        logging.info(f"Files to move:    {move_ops}")
+        logging.info(f"Files to archive: {archive_ops}")
+        logging.info(f"Total operations: {total_ops}")
+        logging.info("="*70 + "\n")
+
+        # Prompt for confirmation
+        user_input = input("Continue with these operations? (yes/no): ").strip().lower()
+        if user_input not in ('yes', 'y'):
+            logging.info("Operation cancelled by user.")
+            return stats
+
     # Warning if force_continue is used
     if force_continue and not dry_run:
         logging.warning("=" * 80)
@@ -435,6 +478,9 @@ def execute_operations(operations: List[Dict[str, Any]], dry_run: bool = True, c
         logging.warning("=" * 80)
 
     # Create transaction log before executing (only for non-dry-run and not force_continue)
+    # SECURITY NOTE: Transaction log contains file paths and operational details.
+    # The create_transaction_log function automatically sets restrictive permissions (600).
+    # Ensure this log file is protected from unauthorized access, especially on multi-user systems.
     if not dry_run and create_log and not force_continue:
         if not create_transaction_log(operations, log_file):
             error_msg = (
@@ -600,6 +646,31 @@ def create_transaction_log(operations: List[Dict[str, Any]], log_file: str = '.d
     Create a transaction log before executing operations.
     This allows for rollback/undo functionality.
 
+    SECURITY CONSIDERATIONS:
+
+    This function creates a JSON file containing full file paths from your system.
+    The transaction log will include:
+    - Source and destination paths for move operations
+    - File paths marked for removal/archival
+    - Directory structure information
+
+    PROTECTION REQUIREMENTS:
+    - The transaction log file should have restrictive permissions (600 - read/write for owner only)
+    - Parent directories should have appropriate permissions (700 or 750)
+    - Transaction logs should NOT be committed to version control (.gitignore)
+    - Securely delete old transaction logs when operations are verified complete
+
+    PATH DISCLOSURE RISKS:
+    - Full paths reveal system structure, usernames, and project organization
+    - Multi-user systems: other users could read paths if permissions are not set
+    - Archive paths in logs show directory hierarchy used during deduplication
+
+    RECOMMENDED POST-OPERATION ACTIONS:
+    1. Review the transaction log to verify operations are correct
+    2. Delete or securely archive the log after confirming success
+    3. For sensitive data: use 'shred' or similar tools for secure deletion
+    4. Verify permissions: ls -la .dedup_transaction.json should show 600
+
     Args:
         operations: List of operations to log
         log_file: Path to transaction log file
@@ -616,6 +687,14 @@ def create_transaction_log(operations: List[Dict[str, Any]], log_file: str = '.d
 
         with open(log_file, 'w') as f:
             json.dump(transaction, f, indent=2)
+
+        # IMPORTANT: Set restrictive permissions on transaction log file
+        # This prevents other users from reading sensitive path information
+        try:
+            os.chmod(log_file, 0o600)  # rw------- (read/write for owner only)
+        except OSError as perm_error:
+            logging.warning(f"Could not set restrictive permissions on {log_file}: {perm_error}")
+            logging.warning("Please manually run: chmod 600 " + log_file)
 
         logging.info(f"Transaction log created: {log_file}")
         return True
