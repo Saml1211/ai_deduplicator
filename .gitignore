@@ -1,19 +1,44 @@
-# Logs and Reports
+# Logs and reports
 *.log
 *.json
 *.png
 
-# Python cache
+# Keep the example config (it has no real data)
+!.env.example
+
+# Secrets / credentials — never commit
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials*
+secrets*
+
+# Python cache / build artifacts
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
+build/
+dist/
+.eggs/
 
 # Virtual environment
 venv/
 ENV/
-.env
-.venv
+.env/
+.venv/
+
+# Test / coverage
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Dedup runtime artifacts
+.dedup-deleted/
+.dedup_transaction*.json
 
 # OS specific
 .DS_Store
-Thumbs.db 
+Thumbs.db

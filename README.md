@@ -2,6 +2,61 @@
 
 This repository provides a suite of tools designed to bring intelligent order to your directories. It features an advanced AI-driven organizer that analyzes file content and patterns to propose optimal structures, alongside a traditional rule-based deduplicator. A setup script facilitates easy global installation for use across all your projects.
 
+## Quick Start
+
+Two console scripts ship with this package:
+
+| Command | What it does | Needs |
+| --- | --- | --- |
+| `deduplicate` | SHA-256 content-hash deduplication. Finds byte-identical files and consolidates them into a preferred directory structure. | **Nothing — completely free, offline.** |
+| `ai-deduplicate` | AI-assisted organization: an LLM proposes a folder structure, then dedups. Falls back to heuristics if no AI is reachable. | Optional: OpenAI key **or** a local LM Studio server. |
+| `ai-dedup-manifest` | Apply a hand-vetted `(keeper, drop)` TSV manifest through the safe archive+undo engine. | Nothing. |
+
+### Install
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .          # core (free dedup)
+pip install -e .[ai]      # + OpenAI client for ai-deduplicate
+pip install -e .[full]    # + pandas/matplotlib for --visualize
+```
+
+### FREE mode (no AI, recommended first run)
+
+```bash
+# Always preview first with --dry-run. It writes deduplication_report.json and changes nothing.
+deduplicate --dry-run --directory /path/to/folder
+
+# Send unmatched files somewhere of your choosing (default is ./financial_recovery/):
+deduplicate --dry-run --directory /path/to/folder --dest ./organized/
+
+# When the preview looks right, run for real. Removed files are ARCHIVED to .dedup-deleted/
+# and a transaction log is written, so you can always:
+deduplicate --directory /path/to/folder
+deduplicate --undo        # roll the last run back
+```
+
+### AI mode (optional — costs money on OpenAI, free on local LM Studio)
+
+```bash
+cp .env.example .env      # then edit .env
+
+# Local LM Studio (free): start LM Studio's server, then:
+ai-deduplicate --dry-run --use-lm-studio --directory /path/to/folder
+
+# OpenAI (paid): set OPENAI_API_KEY in your environment / .env, then:
+ai-deduplicate --dry-run --directory /path/to/folder
+
+# No AI at all — heuristic rules only:
+ai-deduplicate --dry-run --no-ai --directory /path/to/folder
+```
+
+AI backends (model, temperature, URL, prompts) are configured via `.deduplication_config.json`
+and/or the `--config`, `--lm-studio-url`, `--temperature`, `--system-prompt` flags.
+
+> Safety: both tools default to leaving originals in place — duplicates are *archived* to
+> `.dedup-deleted/`, never hard-deleted, and every live run is reversible with `--undo`.
+
 ## Core Philosophy
 
 Go beyond simple duplicate removal. These tools aim to understand your data and create logical, maintainable directory structures, leveraging AI for dynamic adaptation to different content domains (code, documents, media, etc.).

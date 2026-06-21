@@ -7,14 +7,13 @@ name = "ai-deduplicator"
 version = "0.1.0"
 description = "AI-driven file organization and deduplication tools."
 readme = "README.md"
-requires-python = ">=3.7" # Increased slightly for safety with newer features
-license = {text = "MIT License"}
+requires-python = ">=3.8"
+license = "MIT"
 authors = [
   {name = "AI Deduplicator Contributors", email = "contributors@example.com"},
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: System :: Filesystems",
     "Topic :: Utilities",
@@ -38,9 +37,13 @@ dev = [
     "pytest-cov>=4.0",
 ]
 
+[tool.setuptools]
+packages = ["ai_deduplicator"]
+
 [project.scripts]
 ai-deduplicate = "ai_deduplicator.ai_dynamic_deduplicate:main"
 deduplicate = "ai_deduplicator.deduplicate_files:main"
+ai-dedup-manifest = "ai_deduplicator.apply_manifest:main"
 
 [project.urls]
 "Homepage" = "https://github.com/Saml1211/ai_deduplicator"

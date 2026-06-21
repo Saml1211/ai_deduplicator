@@ -32,6 +32,10 @@ import json
 # Import common utilities
 from . import dedup_utils
 
+# Default catch-all destination for files that don't match any specific rule.
+# Override at runtime with the --dest CLI flag (see main()).
+DEFAULT_DEST = './financial_recovery/'
+
 # Define preferred directory structure
 # The key is a regex pattern to match file paths, the value is the preferred location
 PREFERRED_STRUCTURE = {
@@ -69,7 +73,7 @@ PREFERRED_STRUCTURE = {
     r'.*sellable_items\.csv$': './assets/sell/',
     
     # Default pattern (keep in financial_recovery if no match)
-    r'.*': './financial_recovery/'
+    r'.*': DEFAULT_DEST
 }
 
 # File extensions to skip (binary files, temp files, etc.)
@@ -80,25 +84,37 @@ def calculate_file_hash(filepath):
     # Use the utility function, which includes error handling and logging
     return dedup_utils.calculate_file_hash(filepath)
 
-def get_preferred_location(filepath):
+def get_preferred_location(filepath, structure=None):
     """Determine the preferred location for a file based on its path."""
-    for pattern, location in PREFERRED_STRUCTURE.items():
+    structure = structure if structure is not None else PREFERRED_STRUCTURE
+    for pattern, location in structure.items():
         if re.match(pattern, str(filepath)):
             return location
-    return PREFERRED_STRUCTURE[r'.*']  # Default location
+    return structure.get(r'.*', DEFAULT_DEST)  # Default location
 
-def generate_deduplication_plan(duplicates):
+def build_preferred_structure(default_dest=None):
+    """Return a copy of PREFERRED_STRUCTURE with the catch-all default overridden.
+
+    If *default_dest* is None, the built-in DEFAULT_DEST is used so behaviour is
+    unchanged for callers that don't supply a destination.
+    """
+    structure = dict(PREFERRED_STRUCTURE)
+    structure[r'.*'] = default_dest or DEFAULT_DEST
+    return structure
+
+def generate_deduplication_plan(duplicates, structure=None):
     """
     Generate a plan for handling duplicates.
     Returns a list of operations to perform.
     """
+    structure = structure if structure is not None else PREFERRED_STRUCTURE
     operations = []
-    
+
     for file_hash, filepaths in duplicates.items():
         # Group files by their preferred location
         location_groups = defaultdict(list)
         for filepath in filepaths:
-            preferred_location = get_preferred_location(filepath)
+            preferred_location = get_preferred_location(filepath, structure)
             location_groups[preferred_location].append(filepath)
         
         # For each preferred location, keep one file and mark others for removal
@@ -157,6 +173,10 @@ def main():
     parser.add_argument('--dry-run', action='store_true', help='Simulate operations without making changes')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
     parser.add_argument('--directory', '-d', default='.', help='Directory to analyze (default: current directory)')
+    parser.add_argument('--dest', '--default-dest', dest='dest', default=None,
+                        help='Destination directory for files that do not match a specific rule '
+                             '(overrides the catch-all default of %r). Files matching specific '
+                             'rules are unaffected.' % DEFAULT_DEST)
     parser.add_argument('--undo', action='store_true', help='Rollback the last deduplication operation')
     parser.add_argument('--force-continue', action='store_true', help='Bypass transaction log safety checks and execute without creating a transaction log. WARNING: Use only if you fully understand the risks. Rollback will be impossible if something goes wrong.')
     parser.add_argument('--skip-patterns', type=str, default='', help='Comma-separated list of directory/file patterns to skip (example: ".custom_dir,temp_files,cache")')
@@ -217,8 +237,12 @@ def main():
     # Logging info about findings is now inside scan_directory
     # logging.info(f"Found {len(duplicates)} unique files with duplicates")
     
-    # Generate a plan for handling duplicates based on PREFERRED_STRUCTURE
-    operations = generate_deduplication_plan(duplicates)
+    # Generate a plan for handling duplicates based on PREFERRED_STRUCTURE.
+    # The catch-all destination can be overridden via --dest; specific rules are unchanged.
+    structure = build_preferred_structure(args.dest)
+    if args.dest:
+        logging.info(f"Using custom catch-all destination: {args.dest}")
+    operations = generate_deduplication_plan(duplicates, structure)
     logging.info(f"Generated plan with {len(operations)} operations based on preferred structure rules.")
     
     # Execute the operations using the utility function
