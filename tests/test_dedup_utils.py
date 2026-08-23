@@ -137,3 +137,25 @@ def test_generate_report():
     assert 'duplicates_found' in report
     assert 'operations_executed_details' in report
     assert report['statistics']['operations_executed'] == stats
+
+
+def test_generate_report_bytes_recoverable(tmp_path):
+    """bytes_recoverable counts every copy beyond the first per duplicate group."""
+    a = tmp_path / "a.txt"; a.write_bytes(b"x" * 1000)
+    b = tmp_path / "b.txt"; b.write_bytes(b"x" * 1000)   # same content, 1000 B
+    c = tmp_path / "c.txt"; c.write_bytes(b"y" * 400)
+    d = tmp_path / "d.txt"; d.write_bytes(b"y" * 400)   # group 2: 400 B recoverable
+
+    duplicates = {
+        'hash_a': [str(a), str(b)],
+        'hash_y': [str(c), str(d)],
+    }
+    report = dedup_utils.generate_report(duplicates, [], {'moved': 0, 'archived': 0, 'errors': 0})
+    # keeper (largest/first) kept in each group: 1000 + 400 recoverable
+    assert report['statistics']['bytes_recoverable'] == 1400
+
+
+def test_generate_report_missing_file_counts_zero():
+    duplicates = {'h': ['/nonexistent/a.txt', '/nonexistent/b.txt']}
+    report = dedup_utils.generate_report(duplicates, [], {'moved': 0, 'archived': 0, 'errors': 0})
+    assert report['statistics']['bytes_recoverable'] == 0

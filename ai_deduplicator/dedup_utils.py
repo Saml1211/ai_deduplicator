@@ -609,12 +609,26 @@ def execute_operations(operations: List[Dict[str, Any]], dry_run: bool = True, c
 def generate_report(duplicates: Dict[str, List[str]], operations: List[Dict[str, Any]], stats: Dict[str, int], strategy: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """Generate a detailed report of duplicates and operations."""
     total_duplicates = sum(len(files) for files in duplicates.values()) - len(duplicates)
-    
+
+    def _size(path: str) -> int:
+        try:
+            return os.path.getsize(path)
+        except OSError:
+            return 0
+
+    # Every copy beyond the first in each identical-content group is
+    # recoverable space once the duplicates are consolidated.
+    bytes_recoverable = sum(
+        sum(sorted((_size(p) for p in paths), reverse=True)[1:])
+        for paths in duplicates.values()
+    )
+
     report = {
         'timestamp': datetime.now().isoformat(),
         'statistics': {
             'total_unique_files_with_duplicates': len(duplicates),
             'total_duplicate_instances_found': total_duplicates,
+            'bytes_recoverable': bytes_recoverable,
             'operations_planned': len(operations),
             'operations_executed': stats
         },

@@ -260,6 +260,13 @@ def main():
     
     # Print summary
     logging.info("Rule-based deduplication process complete!") # Updated message
+    recovered = report['statistics']['bytes_recoverable']
+    if recovered:
+        for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+            if recovered < 1024 or unit == 'TB':
+                break
+            recovered /= 1024
+        logging.info(f"Duplicate content taking up space: {recovered:.2f} {unit}")
     # Stats logging is now inside execute_operations
     # logging.info(f"Files moved: {stats['moved']}")
     # logging.info(f"Files removed: {stats['removed']}")
