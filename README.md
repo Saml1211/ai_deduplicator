@@ -36,6 +36,24 @@ deduplicate --directory /path/to/folder
 deduplicate --undo        # roll the last run back
 ```
 
+### Rule-based planner check
+
+The rule-based planner keeps one copy per preferred-location group and schedules
+one archive operation per other scanned path, including copies already in that
+location. This keeps dry-run counts consistent with a successful live execution;
+`--dry-run` reports planned archives, not files actually moved or space reclaimed.
+Identical assets can still be required at multiple paths: a hash match is not
+permission to remove them.
+
+```bash
+python3 -B -m pytest tests/test_rule_based_plan.py -q
+```
+
+These checks cover preferred/outside copies, separate location groups, and an
+archive/undo round trip on disposable files. They do not certify concurrent
+file changes, arbitrary caller-supplied plans, destination collisions, or every
+rollback failure mode. No live cleanup or recurring adoption is implied.
+
 ### AI mode (optional — costs money on OpenAI, free on local LM Studio)
 
 ```bash

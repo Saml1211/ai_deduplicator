@@ -127,13 +127,6 @@ def generate_deduplication_plan(duplicates, structure=None):
             if files_in_preferred_location:
                 # Keep the file that's already in the preferred location
                 keep_file = files_in_preferred_location[0]
-                # If multiple files in preferred location, mark extras for removal
-                for extra in files_in_preferred_location[1:]:
-                    operations.append({
-                        'action': 'remove',
-                        'file': extra,
-                        'reason': 'duplicate in preferred location'
-                    })
             else:
                 # No file in preferred location, move one there
                 keep_file = files[0]
